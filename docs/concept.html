@@ -1,0 +1,509 @@
+<title>Moth the Smoke Cat</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;1,400&display=swap">
+<style>
+/* Layout: painted scene band on top, then one calm reading column; levels, palette and decisions break out to a wider grid. */
+:root{
+  --paper:#eef1ea;      /* pale meadow-washed paper */
+  --card:#f8f9f4;
+  --ink:#24222c;        /* text, close to the cat's ink but never the cat */
+  --muted:#5b6170;
+  --line:#d3d9cf;
+  --amber:#a8670f;      /* goal amber, darkened for text on paper */
+  --amber-soft:#f2b55a;
+  --plum:#4a3f5c;
+  --blue:#3f6f94;       /* optional / keepsake */
+  --chip:#e3e9df;
+  --display:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",Georgia,serif;
+  --body:"Nunito","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --measure:40rem;
+  --wide:62rem;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#14151d;--card:#1c1e28;--ink:#ece6d8;--muted:#a3a8b5;--line:#2f3240;
+  --amber:#f2b55a;--amber-soft:#f2b55a;--plum:#b9aad3;--blue:#8fb7d8;--chip:#262936;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#14151d;--card:#1c1e28;--ink:#ece6d8;--muted:#a3a8b5;--line:#2f3240;
+  --amber:#f2b55a;--amber-soft:#f2b55a;--plum:#b9aad3;--blue:#8fb7d8;--chip:#262936;color-scheme:dark}
+
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:1.0625rem;line-height:1.62}
+*{box-sizing:border-box}
+.scene{display:block;width:100%;height:clamp(240px,44vw,460px);background:#e9c79a}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.col{max-width:var(--measure);margin-inline:auto}
+.wide{max-width:var(--wide);margin-inline:auto}
+main{padding-block:0 5rem}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:clamp(2.6rem,7vw,4.4rem);font-weight:800;letter-spacing:-.01em}
+h2{font-size:clamp(1.6rem,3.6vw,2.1rem);font-weight:700}
+h3{font-size:1.2rem;font-weight:700}
+p{margin:0}
+.eyebrow{font-size:.78rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.lede{font-size:1.25rem;line-height:1.5;color:var(--ink);max-width:34rem}
+.meta{color:var(--muted);font-size:.92rem}
+.stack{display:flex;flex-direction:column;gap:1rem}
+.stack-lg{display:flex;flex-direction:column;gap:1.5rem}
+header.intro{padding-block:2.2rem 1rem}
+section{padding-block:3rem 0}
+section > .col > h2, section > .wide > h2{margin-bottom:.25rem}
+ul.plain{margin:0;padding-left:1.15rem;display:flex;flex-direction:column;gap:.45rem}
+ul.plain li::marker{color:var(--amber)}
+strong{font-weight:700}
+em.line{font-style:normal;font-family:var(--display);font-weight:700;color:var(--amber)}
+
+.verdict{border-left:3px solid var(--amber-soft);padding:.25rem 0 .25rem 1.1rem;display:flex;flex-direction:column;gap:.7rem}
+.verdict .big{font-family:var(--display);font-size:1.45rem;font-weight:700;line-height:1.3}
+
+.grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1.1rem 1.2rem;display:flex;flex-direction:column;gap:.5rem;min-width:0}
+.card p{color:var(--ink)}
+.card .small{font-size:.95rem;color:var(--muted)}
+.chip{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:.15rem .55rem;border-radius:99px;background:var(--chip);color:var(--muted);white-space:nowrap}
+.chip.first{background:var(--amber-soft);color:#2a1d05}
+.verb-head{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem;flex-wrap:wrap}
+
+.controls{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}
+kbd{font-family:var(--body);font-weight:700;font-size:.9rem;background:var(--card);border:1px solid var(--line);border-bottom-width:3px;border-radius:7px;padding:.2rem .6rem}
+
+/* day arc */
+.arc{height:18px;border-radius:99px;background:linear-gradient(90deg,#f6e7c8 0%,#f9e3b0 18%,#cfe0c4 32%,#a9cbe0 48%,#e9c58f 66%,#e39a6e 78%,#7a5f86 90%,#262845 100%);margin-block:1.2rem .4rem}
+.arc-labels{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);font-weight:600}
+.level{position:relative}
+.level .num{font-family:var(--display);font-weight:800;font-size:1.5rem;color:var(--amber);line-height:1}
+.level .time{font-size:.8rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.level dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:.25rem .7rem;font-size:.95rem}
+.level dt{font-weight:700;color:var(--muted)}
+.level dd{margin:0;min-width:0}
+.swatch-dot{width:12px;height:12px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:.35rem;border:1px solid rgba(0,0,0,.15)}
+
+/* palette */
+.palette{display:grid;gap:.75rem;grid-template-columns:repeat(auto-fill,minmax(min(100%,13.5rem),1fr))}
+.sw{display:flex;gap:.8rem;align-items:center;min-width:0}
+.sw .c{flex:0 0 3.2rem;height:3.2rem;border-radius:8px;border:1px solid var(--line)}
+.sw .t{display:flex;flex-direction:column;min-width:0}
+.sw .n{font-weight:700}
+.sw .h{font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.sw .r{font-size:.88rem;color:var(--muted)}
+
+/* first minute */
+.timeline{display:flex;flex-direction:column;gap:0;border-left:2px solid var(--line);margin-left:.4rem}
+.beat{position:relative;padding:0 0 1.3rem 1.4rem;display:flex;flex-direction:column;gap:.3rem}
+.beat::before{content:"";position:absolute;left:-7px;top:.45rem;width:12px;height:12px;border-radius:50%;background:var(--paper);border:2px solid var(--amber-soft)}
+.beat .ts{font-size:.8rem;font-weight:700;letter-spacing:.08em;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* table */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+table{border-collapse:collapse;width:100%;min-width:40rem;font-size:.95rem}
+th,td{text-align:left;vertical-align:top;padding:.75rem .9rem;border-bottom:1px solid var(--line)}
+th{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:700;white-space:nowrap}
+tr.pick td{background:color-mix(in srgb,var(--amber-soft) 12%,transparent)}
+
+.ms{display:grid;gap:.8rem;grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))}
+.ms .card .k{font-family:var(--display);font-weight:800;color:var(--amber);font-size:1.1rem}
+
+/* decisions */
+.dec{counter-reset:d;display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr))}
+.dec .card{counter-increment:d}
+.dec h3::before{content:counter(d) ". ";color:var(--amber)}
+.rec{font-size:.95rem;border-top:1px dashed var(--line);padding-top:.55rem;margin-top:auto}
+.rec b{color:var(--amber)}
+.note{font-size:.92rem;color:var(--muted)}
+a{color:var(--blue)}
+:focus-visible{outline:2px solid var(--amber-soft);outline-offset:2px}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+</style>
+
+<canvas class="scene" id="scene" aria-label="Painted dusk valley with a small black smoke cat sitting on a hill, smoke curling from its tail"></canvas>
+
+<main>
+<header class="intro wrap"><div class="col stack">
+  <span class="eyebrow">M0 Concept · third game idea · 23 Oct 2026</span>
+  <h1>Moth</h1>
+  <p class="lede">A calm 3D platform-puzzler about a small cat made of dusk smoke, wandering a hand-painted valley and waking its sleeping spirits.</p>
+  <p class="meta">Creative direction by Fable, scope and tech by the director. Working title. We dropped Fable's first title, <i>Soot and Sun</i>, because "soot" points straight at a famous Ghibli creature.</p>
+</div></header>
+
+<section class="wrap" id="take"><div class="col stack-lg">
+  <span class="eyebrow">Our honest take</span>
+  <div class="verdict">
+    <p class="big">Yes, it's a strong idea, with one twist and one condition.</p>
+    <p><strong>The twist:</strong> the cat is made of shade and the world is made of light. Smoke thins in sun and thickens in shadow, so the game is about moving between light and shade, never about speed or danger.</p>
+    <p><strong>The condition:</strong> "high graphic" has to mean strong art direction, not high polygon count. The Ghibli feeling is painterly and stylised. A small team built by AI can reach that look. Photoreal fur and a huge open world are out of reach.</p>
+  </div>
+  <p>What makes it good: a black cat is instantly lovable, smooth 3D movement is something Bloom and Still Water never gave you, and "shadowish cloudy" works as a movement idea, a puzzle idea and a mood at the same time.</p>
+  <p>The risks, and how the concept answers them:</p>
+  <ul class="plain">
+    <li><strong>Challenges turn into stress.</strong> 3D platformers drift toward timers, deadly falls and retries, which break the calm feel. Here falls float you back and nothing has a timer.</li>
+    <li><strong>A black cat in a dark world can't be read.</strong> So the world is bright and warm, and nothing else is as dark as the cat.</li>
+    <li><strong>Exploration games are often played once.</strong> Short errands, keepsakes and a home nook that fills up give you a reason to come back without pressure.</li>
+    <li><strong>It's a much bigger build than our puzzles.</strong> The art, the cat and the camera are the expensive parts. See <a href="#build">Building it</a>.</li>
+  </ul>
+</div></section>
+
+<section class="wrap" id="cat"><div class="col stack-lg">
+  <span class="eyebrow">The cat</span>
+  <h2>A small cat shaped from dusk smoke</h2>
+  <p>In full sun Moth thins to a soft grey wisp with a visible outline. In shade it thickens to deep velvet black. The tail is a slow trailing wisp that never quite ends. The silhouette is clean and round, with a slightly big head and paws. No fur.</p>
+  <p>The eyes are the one bright point: two warm amber ovals, always the brightest thing on the cat and often the brightest thing on screen.</p>
+  <p><strong>Personality.</strong> Curious, unhurried, a bit proud. Helps because it's nosy, not because it's a hero. Never afraid. Silent: purrs, chirps and body language only.</p>
+  <p class="note">Other name ideas: Sumi (ink) and Umbra (shade). Fable recommends Moth: warm, a little funny, and drawn to light.</p>
+
+  <div class="grid">
+    <div class="card"><h3>Always readable</h3>
+      <ul class="plain">
+        <li><strong>Silhouette.</strong> Levels are built bright and warm around the cat's paths.</li>
+        <li><strong>Rim light.</strong> A thin warm edge that follows the sun, so the shape keeps a line in shade.</li>
+        <li><strong>Eye glow.</strong> Always on, so you can find the cat with no HUD marker.</li>
+      </ul></div>
+    <div class="card"><h3>Little things to love</h3>
+      <ul class="plain">
+        <li>Long stretch after 4 seconds still.</li>
+        <li>Loafs in a sun patch after 10, smoke thinning.</li>
+        <li>Kneads moss and cushions. Tracks moths, lifts one paw.</li>
+        <li>Naps in sunbeams. Sits right where you wanted to look.</li>
+        <li>Shakes off after water.</li>
+      </ul></div>
+  </div>
+</div></section>
+
+<section class="wrap" id="moves"><div class="wide stack-lg">
+  <div class="col stack" style="margin-inline:0;max-width:var(--measure)">
+    <span class="eyebrow">Movement</span>
+    <h2>Four core moves, seven smoke abilities</h2>
+    <p>One stick and two buttons on phone and desktop. Camera follows gently, and you can drag to look.</p>
+    <div class="controls"><kbd>Stick / WASD</kbd> move <kbd>A</kbd> jump, again in the air <kbd>B</kbd> tap to bap, hold for the smoke action</div>
+  </div>
+
+  <h3>Core moves</h3>
+  <div class="grid">
+    <div class="card"><div class="verb-head"><h3>Walk, trot, run</h3><span class="chip first">First build</span></div>
+      <p>How far you tilt the stick sets the speed. The smoke trail gets longer as Moth speeds up. Soft pad-pad steps that change with the surface.</p></div>
+    <div class="card"><div class="verb-head"><h3>Jump</h3><span class="chip first">First build</span></div>
+      <p>High, with a long float at the top. A small smoke ring on takeoff and a hush of air.</p></div>
+    <div class="card"><div class="verb-head"><h3>Double jump</h3><span class="chip first">First build</span></div>
+      <p>Moth bursts into a puff and reforms a little higher. A soft "whuff" and one woodwind note.</p></div>
+    <div class="card"><div class="verb-head"><h3>Paw bap</h3><span class="chip first">First build</span></div>
+      <p>A quick swipe with a squishy "pap". Knocks things off ledges, rings bells, flips switches, pats spirits awake. This is the move you'll use most after walking, so it gets the richest feedback: wobble, a flick of particles, a tiny camera nudge.</p></div>
+  </div>
+
+  <h3>Smoke abilities, one new one per level</h3>
+  <div class="grid">
+    <div class="card"><div class="verb-head"><h3>Thin</h3><span class="chip first">First build</span></div>
+      <p>Hold B by a fence or crack in sunlight. Moth thins to smoke and seeps through, like a slow breath out.</p>
+      <p class="small">Opens shortcuts, locked gardens, "how do I get in there" moments.</p></div>
+    <div class="card"><div class="verb-head"><h3>Wall-shade</h3><span class="chip">Level 2</span></div>
+      <p>In a wall's shadow, Moth flattens into a shadow and slides along the wall, even upward. Like ink moving on paper.</p>
+      <p class="small">The sun's angle decides which walls you can use.</p></div>
+    <div class="card"><div class="verb-head"><h3>Pounce-bap</h3><span class="chip">Level 3</span></div>
+      <p>Hold B, release while moving: a bigger slap that pushes crates and rolls fruit.</p>
+      <p class="small">Simple physics puzzles, like a melon onto a plate.</p></div>
+    <div class="card"><div class="verb-head"><h3>Box squeeze</h3><span class="chip">Level 3</span></div>
+      <p>Jump into any box, pot or basket and Moth always fits. A satisfying "plomp".</p>
+      <p class="small">Boxes ride the wind, float on water, get lifted by spirits.</p></div>
+    <div class="card"><div class="verb-head"><h3>Cloud glide</h3><span class="chip">Level 4</span></div>
+      <p>Hold A at the top of a double jump. Moth puffs into a little cloud and drifts down, steerable.</p>
+      <p class="small">Long gentle crossings, roof landings, no fear of falling.</p></div>
+    <div class="card"><div class="verb-head"><h3>Purr</h3><span class="chip">Level 5</span></div>
+      <p>Hold B while still. A low purr spreads out, with phone haptics. Wakes spirits, calms ripples, opens flowers.</p>
+      <p class="small">The softest move in the game.</p></div>
+    <div class="card"><div class="verb-head"><h3>Sun-soak</h3><span class="chip">Level 7</span></div>
+      <p>Rest in a sun patch until Moth is almost see-through, then walk along a beam of light as a bridge.</p>
+      <p class="small">Late routes where you follow light itself.</p></div>
+  </div>
+</div></section>
+
+<section class="wrap" id="loop"><div class="col stack-lg">
+  <span class="eyebrow">What you do in a level</span>
+  <h2>Return the ember-seeds, wake the spirit</h2>
+  <p>Each level is a small place with one thing asleep. You wander, bap, climb and seep through gaps to find a few <strong>ember-seeds</strong>, small warm seeds that glow like Moth's eyes. You carry one at a time, floating above the tail, to the sleeping <strong>Hearth Spirit</strong> in the middle of the level.</p>
+  <p>Each seed wakes the place a little more: a lantern lights, a stream starts, blossoms open. With the last seed the spirit wakes fully, the place breathes out, and the path to the next level opens.</p>
+  <div class="grid">
+    <div class="card"><h3>One bright goal at a time</h3><p>The seed you're heading for is the only glowing thing. Others stay dim until you're close.</p></div>
+    <div class="card"><h3>Nothing to fail</h3><p>Fall off an edge and you puff into a cloud and drift back. Water just makes Moth a sulky grey cloud that paddles out. No lives, no damage, no timer.</p></div>
+    <div class="card"><h3>Optional high routes</h3><p>A thin trail of fireflies marks a harder path to a <strong>keepsake</strong> (a ribbon, a bell, a hat). Keepsakes change looks, never power.</p></div>
+    <div class="card"><h3>A reason to come back</h3><p>A windowsill nook at the valley inn fills with returned things. Every woken spirit changes the skyline you see from it. Levels take 8 to 15 minutes: one errand and a nap.</p></div>
+  </div>
+  <p class="note">HUD: at most two numbers, and only when they matter. Seeds placed (amber) and, on a high route, keepsakes found (blue).</p>
+</div></section>
+
+<section class="wrap" id="levels"><div class="wide stack-lg">
+  <div class="stack" style="max-width:var(--measure)">
+    <span class="eyebrow">Levels</span>
+    <h2>One valley, one long day</h2>
+    <p>Eight levels from dawn to night. The light changes the mood, and the next smoke ability comes with it. Levels 1 and 2 are the greybox candidates.</p>
+  </div>
+  <div>
+    <div class="arc" role="img" aria-label="Colour strip from pale dawn through blue noon and golden hour to night"></div>
+    <div class="arc-labels"><span>Dawn</span><span>Noon</span><span>Golden hour</span><span>Night</span></div>
+  </div>
+  <div class="grid">
+    <div class="card level"><span class="num">1</span><h3>Mill Terrace</h3><span class="time">Dawn · greybox</span>
+      <dl><dt>Place</dt><dd>Dew, long shadows, a stopped waterwheel.</dd><dt>Teaches</dt><dd>Walk, jump, double jump, bap, Thin.</dd><dt>Moment</dt><dd>The wheel turns as the spirit wakes and mist rolls off the river.</dd></dl></div>
+    <div class="card level"><span class="num">2</span><h3>Washing Lines</h3><span class="time">Mid-morning · greybox</span>
+      <dl><dt>Place</dt><dd>A hillside of houses with sheets on lines.</dd><dt>Teaches</dt><dd>Wall-shade. Sheets cast moving shadow roads.</dd><dt>Moment</dt><dd>Sliding as a shadow across a sheet as the wind lifts it.</dd></dl></div>
+    <div class="card level"><span class="num">3</span><h3>Lunch Garden</h3><span class="time">Noon</span>
+      <dl><dt>Place</dt><dd>Kitchen garden, open-air table, steaming pots, bees.</dd><dt>Teaches</dt><dd>Pounce-bap and Box squeeze.</dd><dt>Moment</dt><dd>Moth naps under the table while the spirit cooks.</dd></dl></div>
+    <div class="card level"><span class="num">4</span><h3>Cloud Orchard</h3><span class="time">Early afternoon</span>
+      <dl><dt>Place</dt><dd>Terraced apple trees climbing into low clouds.</dd><dt>Teaches</dt><dd>Cloud glide.</dd><dt>Moment</dt><dd>Stepping off the top terrace into warm cloud.</dd></dl></div>
+    <div class="card level"><span class="num">5</span><h3>Still Pond Shrine</h3><span class="time">Late afternoon</span>
+      <dl><dt>Place</dt><dd>Reflections, stepping stones, a sleeping koi spirit.</dd><dt>Teaches</dt><dd>Purr: calm the ripples so reflections become paths.</dd><dt>Moment</dt><dd>The pond stills and the sky walks under your paws.</dd></dl></div>
+    <div class="card level"><span class="num">6</span><h3>Golden Field</h3><span class="time">Golden hour</span>
+      <dl><dt>Place</dt><dd>Tall grass, a scarecrow spirit, wind with a will.</dd><dt>Teaches</dt><dd>Thin and glide together on grass currents.</dd><dt>Moment</dt><dd>Wind waves across the field carry the seeds you chase.</dd></dl></div>
+    <div class="card level"><span class="num">7</span><h3>Lantern Town</h3><span class="time">Dusk</span>
+      <dl><dt>Place</dt><dd>Rooftops, warm windows, music from a tea house.</dd><dt>Teaches</dt><dd>Sun-soak, now with lamplight bridges.</dd><dt>Moment</dt><dd>Roof to roof as lanterns light behind you.</dd></dl></div>
+    <div class="card level"><span class="num">8</span><h3>The Night Field</h3><span class="time">Night</span>
+      <dl><dt>Place</dt><dd>Stars, fireflies, Moth's eyes the brightest light.</dd><dt>Teaches</dt><dd>Nothing new. A quiet lap using everything.</dd><dt>Moment</dt><dd>The woken spirits gather, Moth loafs on a hill, dawn hints.</dd></dl></div>
+  </div>
+</div></section>
+
+<section class="wrap" id="art"><div class="wide stack-lg">
+  <div class="stack" style="max-width:var(--measure)">
+    <span class="eyebrow">Art direction</span>
+    <h2>A hand-painted gouache world with one ink-black cat in it</h2>
+    <p>Each colour has one job. The darkest colour belongs to the cat alone: shadows on the ground are plum, never black.</p>
+  </div>
+  <div class="palette">
+    <div class="sw"><span class="c" style="background:#F6E7C8"></span><span class="t"><span class="n">Morning cream</span><span class="h">#F6E7C8</span><span class="r">Dawn skies, paper</span></span></div>
+    <div class="sw"><span class="c" style="background:#F2B55A"></span><span class="t"><span class="n">Hearth amber</span><span class="h">#F2B55A</span><span class="r">Seeds, eyes: the goal</span></span></div>
+    <div class="sw"><span class="c" style="background:#8FB573"></span><span class="t"><span class="n">Meadow green</span><span class="h">#8FB573</span><span class="r">Grass, moss, mid-tones</span></span></div>
+    <div class="sw"><span class="c" style="background:#5C8A72"></span><span class="t"><span class="n">Cedar shade</span><span class="h">#5C8A72</span><span class="r">Tree depths, cool shade</span></span></div>
+    <div class="sw"><span class="c" style="background:#7FA8C9"></span><span class="t"><span class="n">Pond blue</span><span class="h">#7FA8C9</span><span class="r">Water, sky: optional</span></span></div>
+    <div class="sw"><span class="c" style="background:#D77A61"></span><span class="t"><span class="n">Clay rose</span><span class="h">#D77A61</span><span class="r">Roofs, pots, warmth</span></span></div>
+    <div class="sw"><span class="c" style="background:#4A3F5C"></span><span class="t"><span class="n">Dusk plum</span><span class="h">#4A3F5C</span><span class="r">Evening, deep shadow</span></span></div>
+    <div class="sw"><span class="c" style="background:#1B1A22"></span><span class="t"><span class="n">Cat ink</span><span class="h">#1B1A22</span><span class="r">The cat only</span></span></div>
+  </div>
+  <div class="grid">
+    <div class="card"><h3>Light</h3><p>Every level leans golden, even noon. Soft shadows with wide edges. Big painted cumulus skies. One light shaft per scene at most, pointing at the current goal.</p></div>
+    <div class="card"><h3>Shapes and surfaces</h3><p>Round, chunky buildings, a little crooked, as if drawn quickly with love. Layered watercolour textures with paper grain. Foliage sways as painted clumps. Tall grass bends around the cat and in the wind.</p></div>
+    <div class="card"><h3>Camera</h3><p>Third person, pulled back, gently lagging. Default views land on composed shots. Reaching a vista slowly pulls back, so the frame itself is the reward.</p></div>
+    <div class="card"><h3>UI</h3><p>Hand-inked and paper-coloured. Tutorial lines appear as small brush text in the world, next to the thing. No icons on screen in normal play. The pause menu is a sketchbook.</p></div>
+    <div class="card"><h3>Sound leads</h3><p>Solo piano, clarinet, nylon guitar, light strings, a bowed glass tone for spirits. Ambience always; melody fades in while you carry a seed; a warm chord when it lands; the spirit's theme only at full wake. Paws sound different on wood, stone, tile and grass. Smoke uses breath sounds, never whooshes.</p></div>
+    <div class="card"><h3>Other references</h3><p>Journey (one goal glowing ahead), A Short Hike (small kind world, optional peaks), Alba (quiet errands that matter), Ori (fluid air movement, without its difficulty), Ghost of Tsushima (wind as a guide).</p></div>
+  </div>
+  <div class="grid">
+    <div class="card"><h3>How we stay original to Ghibli</h3><p>We borrow feelings only: wind in grass, quiet pauses, food warmth, painted skies, small spirits, gentle melancholy at dusk, a valley that reacts. Our spirits are our own: round clay-and-ember figures like kiln-fired pots with moss. No bus, no soot balls, no big forest creature, no witch's cat. Moth has no white markings or bow and is made of smoke. No names, places or characters from any film.</p></div>
+    <div class="card"><h3>How we differ from other cat games</h3><p><i>Stray</i> is a realistic cat in a neon city with chases and stealth. <i>Little Kitty, Big City</i> is a realistic cat doing comedy chores in a town. Moth is a smoke creature whose body changes with light, in a painted country valley, moving by thinning, shadow-sliding and gliding. No chases, no humans to annoy. The puzzles are about light and shade.</p></div>
+  </div>
+</div></section>
+
+<section class="wrap" id="minute"><div class="col stack-lg">
+  <span class="eyebrow">The first minute</span>
+  <h2>What you'd see in the greybox</h2>
+  <p>Mill Terrace at dawn. Each tutorial line appears in the world near the thing it's about, eight words or fewer, one new move at a time.</p>
+  <div class="timeline">
+    <div class="beat"><span class="ts">0–10 s</span><p>Black screen, a single purr. Fade up on a dewy terrace, mist on the river. Moth is loafing in a sun patch and opens its eyes as you move. <em class="line">"Stretch. Then wander."</em></p></div>
+    <div class="beat"><span class="ts">10–25 s</span><p>A low stone wall with a pot on it and a moth circling. <em class="line">"Jump. Tap again up high."</em> Landing on the wall plays a soft chord.</p></div>
+    <div class="beat"><span class="ts">25–40 s</span><p>The pot sits at the edge. <em class="line">"Bap it."</em> It wobbles, tips and breaks softly into petals and an ember-seed, the only glowing thing. The seed floats to the tail and the melody fades in.</p></div>
+    <div class="beat"><span class="ts">40–55 s</span><p>A fence with sunlight pouring through the slats. <em class="line">"Breathe through the sun."</em> Hold B, Moth thins and seeps through.</p></div>
+    <div class="beat"><span class="ts">55–60 s</span><p>The dim Hearth Spirit by the waterwheel. Walk up, the seed drifts in, one lantern lights, the wheel creaks once. No text. Moth sits. You know the whole game.</p></div>
+  </div>
+</div></section>
+
+<section class="wrap" id="build"><div class="wide stack-lg">
+  <div class="stack" style="max-width:var(--measure)">
+    <span class="eyebrow">Building it</span>
+    <h2>Doable, if we spend effort on look and feel, not detail</h2>
+    <p>The smoke cat is also a technical gift. A body of soft smoke hides the hardest thing in a cat game, which is four-legged animation. Legs can be short procedural strokes, the body a soft blob, the tail a rope of wisps. A realistic furry cat would need a proper rig and dozens of hand-made animations.</p>
+    <p>For us, code is the easy part. The hard parts are below.</p>
+  </div>
+  <div class="grid">
+    <div class="card"><h3>Movement feel</h3><p>Smooth 3D movement is mostly tuning: speed curves, a short grace time after leaving a ledge, jump buffering, landing squash, camera lag. This is the Feel milestone and needs many short play rounds from you.</p></div>
+    <div class="card"><h3>Camera</h3><p>The top cause of frustration in 3D platformers. The calm answer is a gentle automatic camera with set framings per area, and dragging to look as an option.</p></div>
+    <div class="card"><h3>Phone controls</h3><p>A virtual stick plus buttons in 3D feels cramped on a phone. Either we lead with keyboard or gamepad and keep phone playable, or we design a simpler phone scheme from the start.</p></div>
+    <div class="card"><h3>Art assets</h3><p>Terrain, props and the cat take the most work. Blender can run headless here, so props and terrain can be generated by script. The cat is procedural by design. A bought prop pack or an artist could speed up content later.</p></div>
+    <div class="card"><h3>Phone performance</h3><p>Grass, soft shadows and fog are expensive on phones. A quality setting and a resolution cap from day one.</p></div>
+    <div class="card"><h3>Download size</h3><p>A web 3D world has to stay small to open from a link. Target under 20 MB for the first load.</p></div>
+  </div>
+
+  <h3>Which engine</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Option</th><th>How you'd play it</th><th>Good at</th><th>Weak at</th></tr></thead>
+      <tbody>
+        <tr class="pick"><td>Web: Three.js + Rapier physics<br><span class="chip first">Recommended start</span></td><td>A link on phone and desktop, updated on every push, like Bloom and Still Water.</td><td>Same TypeScript and Vite pipeline we already run. Fast to iterate. We can take screenshots here to check our own work.</td><td>No visual level editor. Phone GPUs limit how dense the world can be. Levels are built in code plus Blender.</td></tr>
+        <tr><td>Godot 4</td><td>Installed builds for desktop or mobile, or a heavier web build.</td><td>Free and open. A real 3D editor. Text-based scene files that AI can write well. Native builds.</td><td>Web export is heavier and weaker on iPhone Safari. Every cloud session needs the engine set up. Slower loop for you.</td></tr>
+        <tr><td>Unity</td><td>Installed builds, or a large web build.</td><td>The biggest asset store (stylised shaders, cat packs). Mature tools.</td><td>Editor-heavy workflow that we can't drive well. License terms. Big web builds.</td></tr>
+        <tr><td>Unreal</td><td>Installed builds.</td><td>High-end realism.</td><td>Overkill for a painterly look and a team like ours.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="max-width:var(--measure)"><strong>Recommendation:</strong> build the greybox and the feel on the web with Three.js. After you've felt Moth move, we decide at that gate whether content stays on the web or moves to Godot. The movement tuning carries over as design either way.</p>
+
+  <h3>Milestones, and what you'd play at each gate</h3>
+  <div class="ms">
+    <div class="card"><span class="k">M1 Greybox</span><p>Mill Terrace in plain shapes. Placeholder smoke cat with walk, jump, double jump, bap and Thin. Gentle camera, one seed puzzle, falls that float you back.</p><p class="small">Gate: is moving around already pleasant?</p></div>
+    <div class="card"><span class="k">M2 Feel</span><p>The real smoke cat (body, wisps, eyes, idles), painterly shader, wind grass, sky, first music and paw sounds. Tuned controls and camera.</p><p class="small">Gate: do you love moving this cat? Engine decision.</p></div>
+    <div class="card"><span class="k">M3 Content</span><p>Levels 2 to 4 with their new abilities, keepsakes, the home nook, saving.</p><p class="small">Gate: do you want the next level?</p></div>
+    <div class="card"><span class="k">M4 Polish</span><p>Levels 5 to 8, phone performance pass, accessibility, outside testers.</p><p class="small">Gate: ready to show people.</p></div>
+  </div>
+</div></section>
+
+<section class="wrap" id="decisions"><div class="wide stack-lg">
+  <div class="stack" style="max-width:var(--measure)">
+    <span class="eyebrow">Before the greybox</span>
+    <h2>Seven decisions for you</h2>
+    <p>Each has our recommendation. A short reply like "all recommended" is enough to start M1.</p>
+  </div>
+  <div class="dec">
+    <div class="card"><h3>Add it as a third game?</h3><p>Moth would run alongside the Bloom and Still Water alphas, or one of them pauses.</p><p class="rec"><b>Recommend:</b> run it alongside, greybox only until the M2 gate. Don't pause the alphas.</p></div>
+    <div class="card"><h3>Engine</h3><p>Web with Three.js, or Godot from day one.</p><p class="rec"><b>Recommend:</b> Three.js for M1 and M2, revisit at the M2 gate.</p></div>
+    <div class="card"><h3>Main way to play</h3><p>Keyboard or gamepad first with phone playable, or phone first.</p><p class="rec"><b>Recommend:</b> desktop and gamepad first. 3D movement feels best there, and the phone scheme gets its own pass in M2.</p></div>
+    <div class="card"><h3>Art budget</h3><p>Only procedural and free assets, or money for a prop pack or an artist later.</p><p class="rec"><b>Recommend:</b> procedural and free through M2. Decide on paid help once the look is proven.</p></div>
+    <div class="card"><h3>The cat</h3><p>Name (Moth, Sumi or Umbra), how black, and whether it speaks.</p><p class="rec"><b>Recommend:</b> Moth, pure ink black that turns grey only when thinned, silent.</p></div>
+    <div class="card"><h3>Shape of the game</h3><p>One long day in one valley, or four seasons.</p><p class="rec"><b>Recommend:</b> one day, eight levels. Seasons could be a second valley later.</p></div>
+    <div class="card"><h3>Repo and title</h3><p>We can't create GitHub repos, so you'd make an empty one for us.</p><p class="rec"><b>Recommend:</b> an empty repo named <code>moth</code>, with "Moth" as the working title.</p></div>
+  </div>
+</div></section>
+</main>
+
+<script>
+(() => {
+  const c = document.getElementById('scene');
+  const ctx = c.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W = 0, H = 0;
+  function resize() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = c.clientWidth; H = c.clientHeight;
+    c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  addEventListener('resize', () => { resize(); if (reduce) draw(0); });
+
+  const hill = (x, base, a1, f1, a2, f2, p) => base + Math.sin(x * f1 + p) * a1 + Math.sin(x * f2 + p * 2.3) * a2;
+  const back = x => hill(x / W, H * 0.62, H * 0.035, 5.1, H * 0.02, 11.3, 0.4);
+  const mid  = x => hill(x / W, H * 0.72, H * 0.04, 3.4, H * 0.015, 9.1, 1.7);
+  const front= x => hill(x / W, H * 0.84, H * 0.05, 2.2, H * 0.012, 7.7, 2.9);
+
+  const clouds = Array.from({length: 6}, (_, i) => ({
+    x: Math.random(), y: 0.08 + Math.random() * 0.3, s: 0.6 + Math.random() * 0.8,
+    v: 0.004 + Math.random() * 0.004, puffs: Array.from({length: 7}, () => [Math.random() * 2 - 1, Math.random() * 0.6 - 0.2, 0.35 + Math.random() * 0.45])
+  }));
+  const wisps = [];
+
+  function sky() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#6f8fb8'); g.addColorStop(0.5, '#e7c49b'); g.addColorStop(0.75, '#f6deb4'); g.addColorStop(1, '#f6e7c8');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const sx = W * 0.2, sy = H * 0.6, r = Math.max(W, H) * 0.45;
+    const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
+    sg.addColorStop(0, 'rgba(255,240,200,0.95)'); sg.addColorStop(0.12, 'rgba(255,226,170,0.55)'); sg.addColorStop(1, 'rgba(255,220,170,0)');
+    ctx.fillStyle = sg; ctx.fillRect(0, 0, W, H);
+  }
+  function drawClouds(dt) {
+    const unit = Math.min(W, 900) * 0.09;
+    for (const cl of clouds) {
+      cl.x += cl.v * dt; if (cl.x > 1.25) cl.x = -0.25;
+      const cx = cl.x * W, cy = cl.y * H, u = unit * cl.s;
+      const g = ctx.createLinearGradient(0, cy - u, 0, cy + u * 0.6);
+      g.addColorStop(0, 'rgba(255,250,240,0.95)'); g.addColorStop(1, 'rgba(232,186,160,0.85)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      for (const [px, py, pr] of cl.puffs) { ctx.moveTo(cx + px * u * 1.4 + pr * u, cy + py * u); ctx.arc(cx + px * u * 1.4, cy + py * u, pr * u, 0, Math.PI * 2); }
+      ctx.fill();
+    }
+  }
+  function layer(fn, color) {
+    ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 8) ctx.lineTo(x, fn(x));
+    ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+  }
+  function grass(t) {
+    const n = Math.floor(W / 5);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < n; i++) {
+      const x = (i + ((i * 7919) % 13) / 13) * (W / n);
+      const y = front(x) + 3;
+      const h = H * (0.025 + ((i * 2654435761) % 100) / 100 * 0.03);
+      const gust = Math.sin(t * 0.6 - x * 0.004) * 0.5 + 0.5;
+      const sway = (Math.sin(t * 1.4 + x * 0.05) * 0.4 + gust) * h * 0.5;
+      ctx.strokeStyle = i % 3 ? '#5c8a5a' : '#78a465';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + sway * 0.3, y - h * 0.6, x + sway, y - h); ctx.stroke();
+    }
+  }
+  function catPath(cx, g, s, breathe) {
+    const p = new Path2D();
+    p.ellipse(cx + 2 * s, g - 24 * s * breathe, 23 * s, 25 * s * breathe, -0.15, 0, Math.PI * 2);
+    const hx = cx - 12 * s, hy = g - 56 * s * breathe;
+    p.moveTo(hx + 16 * s, hy); p.arc(hx, hy, 16 * s, 0, Math.PI * 2);
+    p.moveTo(hx - 14 * s, hy - 5 * s); p.lineTo(hx - 13 * s, hy - 27 * s); p.lineTo(hx - 2 * s, hy - 13 * s); p.closePath();
+    p.moveTo(hx + 3 * s, hy - 13 * s); p.lineTo(hx + 13 * s, hy - 26 * s); p.lineTo(hx + 15 * s, hy - 4 * s); p.closePath();
+    p.moveTo(cx - 14 * s, g); p.ellipse(cx - 12 * s, g - 2 * s, 9 * s, 4 * s, 0, 0, Math.PI * 2);
+    return { p, hx, hy };
+  }
+  function tailPath(cx, g, s, t) {
+    const w = Math.sin(t * 0.9) * 6 * s;
+    const p = new Path2D();
+    p.moveTo(cx + 20 * s, g - 6 * s);
+    p.bezierCurveTo(cx + 46 * s, g - 2 * s, cx + 52 * s + w, g - 26 * s, cx + 40 * s + w, g - 44 * s);
+    return { p, tip: [cx + 40 * s + w, g - 44 * s] };
+  }
+  let nextBlink = 2.5, blinkT = -1, spawnAcc = 0;
+  function cat(t, dt) {
+    const s = Math.max(0.8, Math.min(1.7, H / 300));
+    const cx = W * 0.7, g = front(cx) + 4 * s;
+    const breathe = 1 + Math.sin(t * 1.6) * 0.015;
+    const { p, hx, hy } = catPath(cx, g, s, breathe);
+    const tail = tailPath(cx, g, s, t);
+
+    // wisps rising from back and tail
+    spawnAcc += dt * 20;
+    while (spawnAcc >= 1) {
+      spawnAcc -= 1;
+      const fromTail = Math.random() < 0.55;
+      const [bx, by] = fromTail ? tail.tip : [cx + (Math.random() * 30 - 10) * s, g - (40 + Math.random() * 10) * s];
+      wisps.push({ x: bx, y: by, r: 3 * s, a: 0.32, vx: (Math.random() * 6 - 4) * s, vy: -(8 + Math.random() * 10) * s, life: 0 });
+    }
+    for (let i = wisps.length - 1; i >= 0; i--) {
+      const w = wisps[i]; w.life += dt; w.x += (w.vx + Math.sin(t * 2 + w.life * 3) * 3 * s) * dt; w.y += w.vy * dt; w.r += 7 * s * dt; w.a -= 0.13 * dt;
+      if (w.a <= 0) { wisps.splice(i, 1); continue; }
+      const wg = ctx.createRadialGradient(w.x, w.y, 0, w.x, w.y, w.r);
+      wg.addColorStop(0, `rgba(27,26,34,${w.a.toFixed(3)})`); wg.addColorStop(1, 'rgba(27,26,34,0)');
+      ctx.fillStyle = wg;
+      ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2); ctx.fill();
+    }
+    if (wisps.length > 160) wisps.splice(0, wisps.length - 160);
+
+    // rim light then body
+    ctx.save(); ctx.translate(-1.6 * s, -0.6 * s);
+    ctx.fillStyle = '#ffd99c'; ctx.fill(p);
+    ctx.strokeStyle = '#ffd99c'; ctx.lineWidth = 9 * s; ctx.lineCap = 'round'; ctx.stroke(tail.p);
+    ctx.restore();
+    ctx.fillStyle = '#1b1a22'; ctx.fill(p);
+    ctx.strokeStyle = '#1b1a22'; ctx.lineWidth = 9 * s; ctx.lineCap = 'round'; ctx.stroke(tail.p);
+
+    // eyes
+    if (!reduce) {
+      nextBlink -= dt;
+      if (nextBlink <= 0) { blinkT = 0; nextBlink = 3 + Math.random() * 3; }
+      if (blinkT >= 0) { blinkT += dt; if (blinkT > 0.18) blinkT = -1; }
+    }
+    const open = blinkT >= 0 ? Math.max(0.1, Math.abs(blinkT - 0.09) / 0.09) : 1;
+    ctx.save(); ctx.shadowColor = 'rgba(242,181,90,0.9)'; ctx.shadowBlur = 10 * s; ctx.fillStyle = '#f2b55a';
+    for (const ex of [hx - 7 * s, hx + 5 * s]) { ctx.beginPath(); ctx.ellipse(ex, hy + 1 * s, 3.2 * s, 4.2 * s * open, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  }
+  let last = 0, t = 0;
+  function draw(dt) {
+    sky(); drawClouds(dt);
+    layer(back, '#b9c9ae'); layer(mid, '#94b37f'); layer(front, '#6f9a62');
+    grass(t); cat(t, dt);
+  }
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now; t += dt;
+    if (!document.hidden) draw(dt);
+    requestAnimationFrame(frame);
+  }
+  if (reduce) {
+    // settle a still frame with some smoke already risen
+    for (let i = 0; i < 90; i++) { t += 1/30; cat(t, 1/30); }
+    draw(0);
+  } else requestAnimationFrame(frame);
+})();
+</script>
