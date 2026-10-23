@@ -34,7 +34,7 @@ const dumpling = {
 };
 
 const lantern = {
-  id: 'lantern', name: 'Lantern',
+  id: 'lantern', name: 'Lantern, first try',
   pitch: 'A slimmer dusk-cloud cat whose thin edges glow like a paper lantern.',
   headPivot: [0, 2.95, 0.2], headBlend: 0.28,
   headPrims: [
@@ -91,6 +91,37 @@ const stormling = {
   target: [0, 1.9, 0.2], petCenter: [0, 1.9, 0.3], petRadius: 1.8, wispCrown: [0, 3.4, 0.1],
 };
 
+
+const lanternCute = {
+  id: 'lantern-cute', name: 'Lantern, cuter',
+  pitch: 'Rounder head, big open eyes, a little blush, much less smoke.',
+  headPivot: [0, 2.75, 0.2], headBlend: 0.3,
+  headPrims: [
+    { t: 'sph', c: [0, 2.75, 0.2], r: 1.0 },
+    ...mirror({ t: 'sph', c: [0.62, 2.5, 0.42], r: 0.42, k: 0.3 }),
+    { t: 'ell', c: [0, 2.48, 0.95], r: [0.36, 0.25, 0.3], k: 0.22 },
+    { t: 'cone', a: [-0.52, 3.42, 0.05], b: [-0.8, 4.25, -0.05], r1: 0.34, r2: 0.11, k: 0.2, ear: 'L' },
+    { t: 'cone', a: [0.52, 3.42, 0.05], b: [0.76, 4.28, -0.08], r1: 0.34, r2: 0.11, k: 0.2, ear: 'R' },
+  ].map(clean),
+  bodyPrims: [
+    { t: 'ell', c: [0, 1.22, -0.2], r: [0.82, 1.12, 0.9], k: 0.4 },
+    { t: 'ell', c: [0, 1.92, 0.48], r: [0.56, 0.44, 0.38], k: 0.4 },
+    ...mirror({ t: 'ell', c: [0.62, 0.62, -0.25], r: [0.45, 0.52, 0.6], k: 0.35 }),
+    ...mirror({ t: 'cap', a: [0.32, 1.4, 0.48], b: [0.32, 0.22, 0.6], r: 0.2, k: 0.25, calm: true }),
+    ...mirror({ t: 'ell', c: [0.33, 0.17, 0.72], r: [0.27, 0.17, 0.33], k: 0.2, calm: true }),
+  ].map(clean),
+  tail: { k: 0.3, pts: [[0.3, 0.4, -0.95, 0.2], [0.9, 0.35, -1.05, 0.2], [1.4, 0.5, -0.75, 0.19], [1.65, 0.9, -0.3, 0.18], [1.65, 1.4, 0.05, 0.17], [1.45, 1.8, 0.2, 0.15], [1.2, 1.95, 0.12, 0.12]] },
+  eyes: { c: [[-0.42, 2.74, 0.97], [0.42, 2.74, 0.97]], r: 0.33, fwd: [0.3, 0.02, 1], irisR: 0.8, pupilW: 0.46, pupilH: 0.66, lidRest: 1.05,
+    catch: [[-0.4, 0.45, 0.32], [0.45, -0.4, 0.15]] },
+  nose: { c: [0, 2.53, 1.24], r: [0.085, 0.06, 0.05] },
+  faceCenter: [0, 2.62, 0.95], faceRadius: 1.1,
+  blush: { c: [0.6, 2.47, 0.88], r: 0.24, color: '#E79AA6', k: 0.55 },
+  wispAlpha: 0.35,
+  noise: { scale: 2.0, octaves: 1, shell: 0.15, blend: 0.6, inflate: 0.05, amount: 0.55, faceAmp: 0.0, earAmp: 0.1, calmAmp: 0.2, fluff: 0.02, fluffScale: 7.0 },
+  colors: { base: '#3D3860', shadow: '#24203A', rim: '#FFD9A0', glow: '#8E7FB8', irisInner: '#FFE3A3', irisOuter: '#F7A94C', pupil: '#1A1226', nose: '#D88A92' },
+  target: [0, 2.05, 0.2], petCenter: [0, 2.2, 0.2], petRadius: 1.8, wispCrown: [0.76, 4.28, -0.08],
+};
+
 function bound(D) {
   const pts = [];
   for (const p of [...D.headPrims, ...D.bodyPrims]) {
@@ -103,4 +134,4 @@ function bound(D) {
   for (const [p, r] of pts) R = Math.max(R, Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]) + r);
   return { c, r: R + 0.45 };
 }
-export const DESIGNS = [dumpling, lantern, stormling].map(D => ({ ...D, bound: bound(D) }));
+export const DESIGNS = [lanternCute, lantern].map(D => ({ ...D, bound: bound(D) }));

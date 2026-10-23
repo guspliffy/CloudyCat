@@ -30,7 +30,7 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 
 <canvas id="gl" aria-label="Moth, a small cat made of cloud, in 3D. Drag to turn it, tap it to pet it."></canvas>
 <div class="top">
-  <div class="title"><b>Moth</b><span>Look study · three cloud-cat designs</span></div>
+  <div class="title"><b>Moth</b><span>Look study · Lantern</span></div>
   <button class="light" id="light" aria-label="Change the light">Golden hour</button>
 </div>
 <div class="bottom">
@@ -146,7 +146,7 @@ vec3 mapCat(vec3 p, bool detail){
   // face mask: 1 = fully cloudy, low near the face front
   vec3 fq = ph - ${v3(D.faceCenter)};
   float face = smoothstep(${f(D.faceRadius*0.45)}, ${f(D.faceRadius)}, length(fq*vec3(1.0,1.15,0.8)));
-  float amp = mix(${f(D.noise.faceAmp)}, 1.0, face) * mix(1.0, ${f(D.noise.earAmp ?? 0.3)}, 1.0-smoothstep(0.0,0.35,dEars-d)) * mix(1.0, ${f(D.noise.calmAmp ?? 0.35)}, 1.0-smoothstep(0.0,0.3,dCalm-d)) * (1.0 + uPuff*0.5);
+  float amp = ${f(D.noise.amount ?? 1)} * mix(${f(D.noise.faceAmp)}, 1.0, face) * mix(1.0, ${f(D.noise.earAmp ?? 0.3)}, 1.0-smoothstep(0.0,0.35,dEars-d)) * mix(1.0, ${f(D.noise.calmAmp ?? 0.35)}, 1.0-smoothstep(0.0,0.3,dCalm-d)) * (1.0 + uPuff*0.5);
   if(detail){
     float sc=${f(D.noise.scale)};
     vec3 np = p*sc + vec3(0.0, -uTime*0.06, uTime*0.015);
@@ -264,6 +264,7 @@ void main(){
       float thin = clamp(catDist(hit + uSun*0.25)/0.25, 0.0, 1.0);
       c += GLOW*thin*(0.15+fres*0.8)*(0.4+back);
       c += GLOW*uPuff*0.25*fres;
+      ${D.blush ? `{ vec3 hp = toHead(hit); float bl = smoothstep(${f(D.blush.r)}, 0.0, length(hp - ${v3(D.blush.c)})) + smoothstep(${f(D.blush.r)}, 0.0, length(hp - ${v3([-D.blush.c[0], D.blush.c[1], D.blush.c[2]])})); c = mix(c, ${lin(D.blush.color)}*(skyAmb*0.9 + sunCol*dif*0.55), clamp(bl,0.0,1.0)*${f(D.blush.k ?? 0.6)}*step(0.0,n.z)); }` : ''}
       col=c;
     } else if(mat<1.5){
       // eye
@@ -336,7 +337,7 @@ function wispCode(D) {
     float tc = dot(wp-ro, rd);
     if(tc>0.0 && tc<tHit){
       float dd = length(ro+rd*tc-wp);
-      float a = exp(-dd*dd/(wr*wr)*2.2)*(1.0-life)*smoothstep(0.0,0.12,life)*0.7;
+      float a = exp(-dd*dd/(wr*wr)*2.2)*(1.0-life)*smoothstep(0.0,0.12,life)*${f(0.7*(D.wispAlpha ?? 1))};
       vec3 wc = mix(${`pow(${'vec3'}(0.0),vec3(1.0))`}, vec3(0.0), 0.0);
       wc = mix(BASE*skyAmb*1.1, RIM*0.9, 0.35 + 0.4*pow(clamp(dot(rd,uSun),0.0,1.0),2.0));
       col = mix(col, wc, a);
