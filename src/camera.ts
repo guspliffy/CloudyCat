@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { T } from './tuning';
 
-// Gentle third-person camera: lags behind, swings round behind Moth whenever it walks,
+// Third-person camera: stays right behind Moth whenever it walks, calm while it turns on the spot,
 // can be dragged to look around, and pulls in rather than clipping through hedges.
 export class FollowCamera {
   cam: THREE.PerspectiveCamera;
@@ -11,9 +11,6 @@ export class FollowCamera {
   private focus = new THREE.Vector3();
   private dist = T.camDistance;
   private sinceManual = 99;
-  private yawVel = 0; // the swing eases in and out instead of snapping
-  private heading = 0; // Moth's walking direction, smoothed so small steering does not shake the view
-  private walkFor = 0;
   private tmp = new THREE.Vector3();
   private dir = new THREE.Vector3();
   // the ray reads focus and dir directly, so it is made once
@@ -32,36 +29,24 @@ export class FollowCamera {
     this.place(1);
   }
 
-  update(dt: number, target: THREE.Vector3, vel: THREE.Vector3, look: number[]) {
+  update(dt: number, target: THREE.Vector3, vel: THREE.Vector3, facing: number, look: number[]) {
     const dragging = !!(look[0] || look[1]);
     if (dragging) {
       this.yaw -= look[0] * T.camDragSpeed; this.pitch = THREE.MathUtils.clamp(this.pitch + look[1] * T.camDragSpeed, -0.05, 1.1);
       this.sinceManual = 0;
     } else this.sinceManual += dt;
 
-    // whenever Moth walks, swing round behind it; a free look only holds while standing (or mid-drag).
-    // Calm on purpose: the walking direction is smoothed, small turns inside a few degrees are ignored,
-    // the swing only starts after a moment of steady walking, and it eases in and out like a held camera.
+    // walking: stay right behind Moth's back, round every corner, like a classic third-person view.
+    // Turning on the spot (no speed yet) leaves the camera calm; a drag takes over while it lasts.
     const hs = Math.hypot(vel.x, vel.z);
-    const walking = this.sinceManual > T.camDragGrace && hs > 0.6;
-    this.walkFor = walking ? this.walkFor + dt : 0;
-    let wantVel = 0;
-    if (walking) {
-      const behind = Math.atan2(-vel.x, -vel.z);
-      if (this.walkFor <= dt) this.heading = behind;
-      let h = behind - this.heading; h = Math.atan2(Math.sin(h), Math.cos(h));
-      this.heading += h * (1 - Math.exp(-3 * dt));
-      let d = this.heading - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
-      const dead = 0.12;
-      d = Math.sign(d) * Math.max(0, Math.abs(d) - dead);
-      // walking straight at the camera turns it round more gently, so the view never whips
-      const k = Math.abs(d) > 2.3 ? 0.4 : 1;
-      const ramp = THREE.MathUtils.smoothstep(this.walkFor, 0.25, 1.0);
-      wantVel = d * T.camAutoYaw * THREE.MathUtils.clamp(hs / 3, 0.5, 1.1) * k * ramp;
-      this.pitch = THREE.MathUtils.damp(this.pitch, T.camPitch, 1.0, dt);
+    const walk = this.sinceManual > T.camDragGrace ? THREE.MathUtils.smoothstep(hs, 0.4, 1.6) : 0;
+    if (walk > 0) {
+      let d = facing + Math.PI - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+      // turning right round toward the camera swings it a little slower, so the view never whips
+      const k = Math.abs(d) > 2.3 ? 0.5 : 1;
+      this.yaw += d * (1 - Math.exp(-T.camAutoYaw * walk * k * dt));
+      this.pitch = THREE.MathUtils.damp(this.pitch, T.camPitch, 1.5 * walk, dt);
     }
-    this.yawVel = THREE.MathUtils.damp(this.yawVel, wantVel, walking ? 3 : 8, dt);
-    this.yaw += this.yawVel * dt;
 
     const goal = this.tmp.copy(target); goal.y += T.camHeight;
     this.focus.x = THREE.MathUtils.damp(this.focus.x, goal.x, T.camLag, dt);

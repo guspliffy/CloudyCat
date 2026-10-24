@@ -281,7 +281,7 @@ async function main() {
   const prevPos = player.pos.clone(), curPos = player.pos.clone();
   const lerpPos = new THREE.Vector3();
   let renderFacing = player.facing;
-  let moveYaw = 0, idleStick = 1;
+  let moveYaw = 0, idleStick = 1, latchAng = 0;
   let goalAt: THREE.Vector3 | null = null, mapped = false;
   const potV = new THREE.Vector3(), tmpV = new THREE.Vector3(), spiritTop = new THREE.Vector3(), ORIGIN = new THREE.Vector3();
   const introFollow = new THREE.Vector3(), introLook = new THREE.Vector3();
@@ -322,10 +322,14 @@ async function main() {
     updateWind(dt);
 
     // movement is read against the camera angle from when the stick was pushed, so the camera can swing
-    // round behind Moth without bending its path; let go (or drag the view) to pick up the new angle
+    // round behind Moth without bending its path (holding a direction walks a straight line, never a circle).
+    // Any change of direction (another key, a new stick angle), letting go or dragging the view picks up
+    // the camera's new angle, so after a corner "forward" is forward on screen again.
     const pushing = Math.abs(input.moveX) + Math.abs(input.moveY) > 0.2;
     idleStick = pushing ? 0 : idleStick + dt;
-    if (idleStick > 0.12 || look[0] || look[1]) moveYaw = camera.yaw;
+    const stickAng = Math.atan2(input.moveX, input.moveY);
+    let turned = stickAng - latchAng; turned = Math.abs(Math.atan2(Math.sin(turned), Math.cos(turned)));
+    if (idleStick > 0.12 || look[0] || look[1] || (pushing && turned > 0.35)) { moveYaw = camera.yaw; latchAng = stickAng; }
 
     acc += dt;
     let n = 0;
@@ -480,7 +484,7 @@ async function main() {
       const base = camOverride.rel ? lerpPos : ORIGIN;
       camera.cam.position.copy(camOverride.p).add(base); camera.cam.lookAt(tmpV.copy(camOverride.t).add(base));
     } else {
-      camera.update(dt, lerpPos, player.vel, look);
+      camera.update(dt, lerpPos, player.vel, renderFacing, look);
       if (inIntro) {
         introFollow.copy(camera.cam.position); introLook.set(lerpPos.x, lerpPos.y + T.camHeight, lerpPos.z);
         introCamera(introT, introFollow, introLook);

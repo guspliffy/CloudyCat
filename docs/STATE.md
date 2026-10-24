@@ -34,6 +34,10 @@ Updated 2026-10-24 (map, camera and quality pass after Jonny's third playtest).
 - Camera a bit further back (camDistance 3.5) and calmer: the walking direction is smoothed, small steering is ignored, the swing eases in and out, height follows slowly so jumps do not bob the view, leaves ease the camera in instead of snapping.
 - Kettle got soft cat ears (they flick now and then, lie back at a run, perk up when happy) and a friendlier face: a small cat smile, bigger pupils, warmer eyes, fully open lids, face-coloured lids for the happy squint.
 
+## Jonny's camera note (2026-10-24 09:15), done
+- The eased camera lagged too much: it only turned once Moth was leaving the screen. Now, while walking, the camera stays right behind Moth's back round every corner (follows Moth's facing, camAutoYaw 5, camLag 10); turning on the spot leaves it calm. Kettle turns a little softer (turnRate 8).
+- Holding one direction walks a straight line; any change of direction picks up the camera's new angle, so after a corner "forward" is forward on screen again.
+
 ## Built: Mill Terrace, rebuilt
 - Art direction in `docs/ART-GUIDE.md` (Ghibli rules, palette, sun, the smoke cat spec, level plan, first 60 seconds, detail list).
 - Painted look (`src/world/ghibli.ts`): two-band anime shading with violet shade, shared wind with gusts. Sky with painted cumulus and far hills (`sky.ts`), blob trees with leaf fringe (`foliage.ts`), wind-blown grass Moth pushes aside (`meadow.ts`), pollen, butterflies, dandelion seeds, chimney smoke (`ambient.ts`).

@@ -7,7 +7,7 @@ export const T = {
   accel: 26,
   decel: 20,
   airAccel: 11,
-  turnRate: 11,
+  turnRate: 8,
 
   // jumping
   gravity: 26,
@@ -37,8 +37,8 @@ export const T = {
   camDistance: 3.5,
   camPitch: 0.34,
   camHeight: 0.5,
-  camLag: 5,
-  camAutoYaw: 1.5,
+  camLag: 10,
+  camAutoYaw: 5,
   camDragGrace: 0.35,
   camDragSpeed: 0.006,
 };
