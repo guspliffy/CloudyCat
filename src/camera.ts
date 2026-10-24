@@ -11,6 +11,8 @@ export class FollowCamera {
   private focus = new THREE.Vector3();
   private dist = T.camDistance;
   private sinceManual = 99;
+  /** tree canopies the camera pulls in front of instead of sitting inside the leaves */
+  soft: { c: THREE.Vector3; r: number }[] = [];
 
   constructor(aspect: number, private world: RAPIER.World, private exclude: RAPIER.Collider, private blocks: Set<number>) {
     this.cam = new THREE.PerspectiveCamera(55, aspect, 0.05, 200);
@@ -52,6 +54,17 @@ export class FollowCamera {
     const hit = this.world.castRay(new RAPIER.Ray(this.focus, dir), T.camDistance, true, undefined, undefined, this.exclude,
       undefined, (c) => this.blocks.has(c.handle));
     if (hit) want = Math.max(1.2, hit.timeOfImpact - 0.3);
+    for (const { c, r } of this.soft) {
+      // first entry of the ray into the sphere; skip when the cat itself stands inside it
+      const ox = this.focus.x - c.x, oy = this.focus.y - c.y, oz = this.focus.z - c.z;
+      const cc = ox * ox + oy * oy + oz * oz - r * r;
+      if (cc < 0) continue;
+      const b = ox * dir.x + oy * dir.y + oz * dir.z;
+      const disc = b * b - cc;
+      if (b > 0 || disc < 0) continue;
+      const t = -b - Math.sqrt(disc);
+      if (t < want) want = Math.max(1.2, t - 0.2);
+    }
     this.dist = want < this.dist ? want : THREE.MathUtils.damp(this.dist, want, 2.5, dt);
     this.cam.position.copy(this.focus).addScaledVector(dir, this.dist);
     this.cam.lookAt(this.focus);

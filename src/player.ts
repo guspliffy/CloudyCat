@@ -44,7 +44,7 @@ export class Player {
     this.body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(start.x, start.y + HALF + RADIUS, start.z));
     this.collider = world.createCollider(RAPIER.ColliderDesc.capsule(HALF, RADIUS).setFriction(0), this.body);
     this.ctrl = world.createCharacterController(0.02);
-    this.ctrl.enableAutostep(0.28, 0.15, false);
+    this.ctrl.enableAutostep(0.32, 0.15, false);
     this.ctrl.enableSnapToGround(0.25);
     this.ctrl.setMaxSlopeClimbAngle((55 * Math.PI) / 180);
     this.ctrl.setMinSlopeSlideAngle((60 * Math.PI) / 180);

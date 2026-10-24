@@ -33,11 +33,16 @@ body { font-family: var(--body); color: var(--ink); touch-action: none; user-sel
   display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.05rem;
   color: var(--amber); text-shadow: 0 1px 6px rgba(40, 28, 50, 0.6);
 }
-#hud .seed { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #ffe7b0, #f2b55a 55%, #c97a22); box-shadow: 0 0 10px #f2b55a; }
+#hud { transition: opacity 0.8s; color: var(--ink); font-family: var(--display); font-size: 1rem; }
+#hud .lamps { display: flex; gap: 6px; }
+#hud .lamps i { width: 13px; height: 13px; border-radius: 50%; background: rgba(138, 148, 168, 0.75); box-shadow: inset 0 0 0 2px rgba(247, 239, 224, 0.7); transition: background 0.6s, box-shadow 0.6s; }
+#hud .lamps i.lit { background: radial-gradient(circle at 40% 35%, #ffe7b0, #f2b55a 55%, #c97a22); box-shadow: 0 0 10px #f2b55a, inset 0 0 0 2px rgba(255, 240, 210, 0.8); }
+#hud .lamps i.next { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 8px #f2b55a, inset 0 0 0 2px rgba(255, 220, 160, 0.95); } }
 
 #banner {
   position: fixed; left: 50%; top: 22%; transform: translateX(-50%);
-  font-family: var(--display); font-size: clamp(1.4rem, 4vw, 2.2rem); text-align: center;
+  font-family: var(--display); font-size: clamp(1.4rem, 4vw, 2.2rem); text-align: center; width: max-content; max-width: 90vw; text-wrap: balance;
   text-shadow: 0 2px 14px rgba(40, 28, 50, 0.85), 0 0 3px rgba(40, 28, 50, 0.6); pointer-events: none; transition: opacity 1s;
 }
 
