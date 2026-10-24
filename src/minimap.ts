@@ -4,7 +4,7 @@ import * as THREE from 'three';
 // painted paper look, then drawn turned with the camera so "up" on the map is always where the camera faces.
 // Only three marks: Moth in the middle, a warm pulse on the next thing to do, and the sleeping spirit.
 
-const AREA = { x0: -13, x1: 24, z0: -31, z1: 11 }; // metres covered by the photo
+const AREA = { x0: -13, x1: 24, z0: -53, z1: 11 }; // metres covered by the photo
 const PX_PER_M = 14;
 const RANGE = 13; // metres from Moth to the edge of the map
 

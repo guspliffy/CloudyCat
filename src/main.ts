@@ -13,19 +13,16 @@ import { Particles } from './particles';
 import { Sky } from './world/sky';
 import { Ambient } from './world/ambient';
 import { SHARED, PAL, setLightLevels, updateWind } from './world/ghibli';
-import { Court, COURT } from './court/court';
-import { STOPS, type Restore } from './court/boards';
-import { createProfile, assign, recordFor, complete, type Profile } from './court/adapt';
-import { rating, type Dir } from './court/rules';
+import type { Family, GardenSave } from './garden/garden';
 
 const STEP = 1 / 60;
 const params = new URLSearchParams(location.search);
-const SAVE_KEY = 'moth-court-v1';
+const SAVE_KEY = 'moth-garden-v1';
 
-// Kettle always walks free. In the spark yard it baps a little spark, which zips until something stops it
-// (Spark Trail's rule). 'win' is the short moment after a first win when the camera visits the piece of
-// the terrace that came back; Kettle waits while it plays.
-type Mode = 'free' | 'win';
+// Kettle always walks free. The riddles live in the spirit garden north of the court (src/garden/).
+// 'shot' is a short moment when the camera shows what a step changed; Kettle waits while it plays.
+type Mode = 'free' | 'shot';
+type Shot = { p: THREE.Vector3; l: THREE.Vector3; dur: number; cut?: boolean; start?: () => void };
 
 async function main() {
   await RAPIER.init();
@@ -95,21 +92,17 @@ async function main() {
   if (touch) input.device = 'touch';
   const sound = new Sound();
 
-  // --- the spark yard, its rounds and the saved progress ---
+  // --- the spirit garden and the saved progress ---
   const glowTex = glowTexture();
-  const court = new Court(glowTex, world);
-  scene.add(court.group);
-  let profile: Profile = createProfile();
-  let nextStop = 0; // the first stop not finished yet; STOPS.length once the spirit is awake
+  const garden = level.spiritGarden;
+  // how quickly hints come, per tool: 0 = soon (that tool took a while last time), 2 = only after a long wait
+  let help: Partial<Record<Family, number>> = {};
   if (params.has('fresh')) { try { localStorage.removeItem(SAVE_KEY); } catch { /* storage may be blocked */ } }
   try {
-    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-    if (saved) { profile = createProfile(saved.profile); nextStop = Math.min(STOPS.length, saved.next | 0); }
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null') as { garden: GardenSave; help: typeof help } | null;
+    if (saved?.garden) { garden.load(saved.garden); help = saved.help ?? {}; }
   } catch { /* a private window starts fresh */ }
-  if (params.has('round')) nextStop = THREE.MathUtils.clamp(+params.get('round')! - 1, 0, STOPS.length);
-  const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ profile, next: nextStop })); } catch { /* not kept, play goes on */ } };
-  let stopIndex = -1; // the stop in the yard right now
-  let replaying = false;
+  const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ garden: garden.save(), help })); } catch { /* not kept, play goes on */ } };
 
   const fireflies = level.fireflies.map((p) => {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: '#FFF1B8', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.5 }));
@@ -123,7 +116,6 @@ async function main() {
   }));
   scene.add(beacon);
   const beaconAt = new THREE.Vector3();
-  const courtCentre = new THREE.Vector3(COURT.cx, 0, COURT.cz);
 
   // --- UI ---
   const coach = document.getElementById('coach')!;
@@ -134,12 +126,10 @@ async function main() {
   const lampDots = [...hud.querySelectorAll('.lamps i')] as HTMLElement[];
   const banner = document.getElementById('banner')!;
   const startEl = document.getElementById('start')!;
-  const bar = document.getElementById('courtbar')!;
   document.getElementById('controls-hint')!.textContent = touch
     ? 'Left thumb moves. Jump and Bap on the right. Drag to look.'
     : 'Move WASD · Jump Space · Bap E · Drag to look. Gamepad works too.';
   document.getElementById('touch')!.hidden = !touch;
-  for (const b of bar.querySelectorAll('button')) b.addEventListener('click', () => input.press(b.dataset.act as 'undo' | 'restart'));
   let started = false, swallow = false;
   let introT = -1;
   const INTRO = 6.0;
@@ -149,7 +139,7 @@ async function main() {
     // the key or button that started the game must not also jump, bap or hurry the intro
     input.takeJump(); input.takePaw(); input.takeAction('confirm'); swallow = true;
     introT = params.has('nointro') ? INTRO : 0;
-    if (introT === 0 && nextStop < STOPS.length) setTimeout(() => showBanner('Help the little sparks wake the spirit.', 3800), 900);
+    if (introT === 0 && !garden.lit) setTimeout(() => showBanner('Light the lantern in the spirit garden.', 3800), 900);
   };
   document.getElementById('go')!.addEventListener('click', begin);
   input.onAny = () => { if (started) sound.start(); };
@@ -161,27 +151,25 @@ async function main() {
     banner.textContent = text; banner.hidden = false; banner.style.opacity = '1';
     bannerFade = setTimeout(() => { banner.style.opacity = '0'; bannerHide = setTimeout(() => (banner.hidden = true), 1000); }, ms);
   }
-  // the HUD: walking, only the goal; in the yard, three ember dots, the puzzle's name and the bap count
+  // the HUD: the goal; in the garden, three ember dots
   let hudKey = '';
   function updateHud() {
-    const onCourt = nearYard && !!court.state;
-    const mask = court.state?.mask ?? 0;
-    const goal = onCourt ? court.board!.name : nextStop >= STOPS.length ? 'The mill is awake' : 'Wake the sleeping spirit';
-    const count = onCourt ? `${court.moves} ${court.moves === 1 ? 'bap' : 'baps'}` : '';
-    const key = `${onCourt}|${mask}|${goal}|${count}`;
+    const show = !garden.lit && (inGarden || garden.foundCount > 0);
+    const found = garden.foundCount;
+    const goal = garden.lit ? 'The mill is awake' : 'Light the spirit lantern';
+    const key = `${show}|${found}|${goal}`;
     if (key === hudKey) return;
     hudKey = key;
-    lamps.hidden = !onCourt;
-    lampDots.forEach((d, i) => { d.classList.toggle('lit', !!(mask & (1 << i))); d.classList.toggle('next', false); });
-    hudGoal.textContent = goal; hudCount.textContent = count; hudCount.hidden = !count;
+    lamps.hidden = !show;
+    lampDots.forEach((d, i) => { d.classList.toggle('lit', i < found); d.classList.toggle('next', false); });
+    hudGoal.textContent = goal; hudCount.hidden = true;
   }
 
   // first-minute coach: one short line at a time, in the world, next to the thing it is about
   const movedFrom = level.anchors.start.clone();
   const anchorAt = new THREE.Vector3();
   const above = (p: THREE.Vector3, h: number) => anchorAt.set(p.x, p.y + h, p.z);
-  let baps = 0, pushedOnce = false, gateOnce = false, stuck = 0, undoneOnce = false;
-  const inYard = () => nearYard && !!court.state && mode === 'free' && court.busy === 0 && !court.drifting;
+  let inGarden = false;
   const steps = [
     { line: 'Follow the path.', key: () => input.glyph('move'), anchor: () => above(player.pos, 1.0),
       show: () => mode === 'free', done: () => player.pos.distanceTo(movedFrom) > 2.5 },
@@ -189,18 +177,18 @@ async function main() {
       show: () => mode === 'free' && player.pos.distanceTo(level.anchors.wall) < 5, done: () => player.usedDouble || (player.grounded && player.pos.y > 2.3) },
     { line: 'Bap the gate open.', key: () => input.glyph('paw'), anchor: () => level.anchors.gate,
       show: () => mode === 'free' && player.pos.distanceTo(level.gate.centre) < 3.5, done: () => level.gate.opening },
-    { line: 'Bap the spark. It zips until stopped.', key: () => input.glyph('paw'), anchor: () => above(court.spark, 0.75),
-      show: inYard, done: () => baps >= 1 },
-    { line: 'Walk round it to bap another way.', key: () => '', anchor: () => above(court.spark, 0.75),
-      show: inYard, done: () => baps >= 3 },
-    { line: 'Gather three embers, then stop in the bowl.', key: () => '', anchor: () => above(court.bowlAt, 0.7),
-      show: () => inYard() && (court.state?.mask ?? 0) !== 7, done: () => nextStop > 0 },
-    { line: 'The spark nudges a crate one stone.', key: () => '', anchor: () => above(court.crateAt ?? court.spark, 1.0),
-      show: () => inYard() && court.hasCrate, done: () => pushedOnce },
-    { line: 'Zip over the brass stone to open gates.', key: () => '', anchor: () => above(court.plateAt ?? court.spark, 0.6),
-      show: () => inYard() && court.hasGate && !court.state!.opened, done: () => gateOnce },
-    { line: 'Stuck? Step back or start over.', key: () => (input.device === 'keyboard' ? 'Z · R' : input.device === 'gamepad' ? 'LB · Y' : ''), anchor: () => above(court.spark, 0.75),
-      show: () => inYard() && stuck >= 3, done: () => undoneOnce },
+    { line: 'Step on the brass plate.', key: () => '', anchor: () => above(garden.plateAt, 0.6),
+      show: () => mode === 'free' && garden.inRoom1(player.pos) && player.pos.distanceTo(garden.plateAt) < 8, done: () => garden.gateEverOpen },
+    { line: 'Push the crate onto the plate.', key: () => '', anchor: () => above(garden.crateAt, 0.9),
+      show: () => mode === 'free' && garden.inRoom1(player.pos) && garden.steppedOffPlate, done: () => garden.crateHeldGate },
+    { line: 'Hop onto the chimney.', key: () => input.glyph('jump'), anchor: () => above(garden.chimneyTop, 0.5),
+      show: () => mode === 'free' && inGarden && !garden.inRoom1(player.pos) && player.pos.distanceTo(garden.chimneyTop) < 4.5, done: () => garden.warpedOnce },
+    { line: 'Bap the bell.', key: () => input.glyph('paw'), anchor: () => above(garden.bellAt, 0.5),
+      show: () => mode === 'free' && garden.inYard(player.pos), done: () => garden.rung },
+    { line: 'A crate makes a good step.', key: () => '', anchor: () => above(garden.plinthTop, 0.8),
+      show: () => mode === 'free' && garden.inRoom1(player.pos) && garden.crateHeldGate && player.pos.distanceTo(garden.plinthTop) < 5.5, done: () => garden.found[0] },
+    { line: 'Bring the embers to the lantern.', key: () => '', anchor: () => above(garden.lanternAt, 2.6),
+      show: () => mode === 'free' && garden.foundCount === 3 && player.pos.distanceTo(garden.lanternAt) < 12, done: () => garden.lit },
   ];
   // a step, once done, stays done; the line shown is the first open step that applies right now
   const stepDone = steps.map(() => false);
@@ -251,6 +239,7 @@ async function main() {
   const petalCol = new THREE.Color('#F2B7B0');
   const shardCol = new THREE.Color(PAL.clay);
   const dustCol = new THREE.Color('#D8CDB6');
+  const smokeCol = new THREE.Color('#E8E2EE');
   const tmp = new THREE.Vector3();
 
   function breakPot(p: typeof level.pots[number]) {
@@ -284,106 +273,76 @@ async function main() {
     cam.lookAt(tmp);
   }
 
-  // --- the spark yard: bapping the spark, raising puzzles, winning ---
+  // --- the garden's chain of riddles, and help that adapts to how each tool went last time ---
   let mode: Mode = 'free';
   let modeT = 0;
   const shotPos = new THREE.Vector3(), shotLook = new THREE.Vector3();
   const wantPos = new THREE.Vector3(), wantLook = new THREE.Vector3();
-  let shotW = 0; // 0 = the follow camera, 1 = a restoration shot
-  let restoreShot: { p: THREE.Vector3; l: THREE.Vector3 } | null = null;
-  let nearYard = false, yardArmed = true, raiseAfter = 0, restAt = -1;
-  function pickReplay(from: number) {
-    for (let k = 0; k < STOPS.length; k++) { const i = (from + k) % STOPS.length; if ((profile.keys[STOPS[i].id] ?? 0) < 3) return i; }
-    return -1;
+  let shotW = 0; // 0 = the follow camera, 1 = a shot
+  let restoreShot: Shot | null = null;
+  let shots: Shot[] = [], shotT = 0, cutBack = false;
+  function playShots(list: Shot[]) {
+    shots = list; shotT = 0; mode = 'shot'; modeT = 0;
+    shotPos.copy(camera.cam.position); shotLook.set(lerpPos.x, lerpPos.y + T.camHeight, lerpPos.z);
+    beginShot();
   }
-  /** The next puzzle the yard offers: the first unfinished stop, then, once the spirit is awake, any stop below three flames. */
-  function wantStop() { return nextStop < STOPS.length ? nextStop : pickReplay(stopIndex + 1); }
-  function raiseBoard(i: number) {
-    stopIndex = i; replaying = nextStop >= STOPS.length;
-    const board = assign(profile, STOPS[i]);
-    recordFor(profile, board).attempts++;
-    court.load(board); sound.rise(); stuck = 0;
-    for (let k = 0; k < 16; k++) particles.emit(tmp.set(COURT.cx + (Math.random() - 0.5) * 5, 0.25, COURT.cz + (Math.random() - 0.5) * 5), new THREE.Vector3(0, 0.6 + Math.random(), 0), 0.12, 1.2, dustCol, 0.5, 1.8, 0.4);
-    save();
+  function beginShot() {
+    const s = shots[0]; restoreShot = s; s.start?.();
+    if (s.cut) { shotPos.copy(s.p); shotLook.copy(s.l); shotW = 1; cutBack = true; }
   }
-  /**
-   * Which way a bap sends the spark: away from Kettle, along the stones' rows or columns. Kettle must be close
-   * and turned toward it; `reach` is a little longer for the aim hint than for the bap itself.
-   */
-  function bapDir(reach: number): Dir | null {
-    const dx = court.spark.x - player.pos.x, dz = court.spark.z - player.pos.z;
-    const h = Math.hypot(dx, dz);
-    if (h > reach || h < 0.05 || Math.abs(court.spark.y - player.pos.y) > 1.1) return null;
-    const fx = Math.sin(player.facing), fz = Math.cos(player.facing);
-    if ((dx * fx + dz * fz) / h < 0.2) return null;
-    const vx = dx / h + fx * 0.5, vz = dz / h + fz * 0.5;
-    return Math.abs(vx) > Math.abs(vz) ? (vx > 0 ? 'right' : 'left') : (vz > 0 ? 'down' : 'up');
-  }
-  function bapSpark() {
-    if (mode !== 'free' || !court.state || court.drifting || court.busy > 0) return false;
-    const d = bapDir(1.05);
-    if (!d) return false;
-    if (court.drift(d)) { baps++; if (court.moves > (court.board?.par ?? 0) + 3) stuck++; } else stuck++;
-    return true;
-  }
-  let winT = 0, winFirst = false, winLine = '';
-  function onWin() {
-    const stop = STOPS[stopIndex], board = court.board!;
-    const before = profile.keys[stop.id] ?? 0;
-    const res = complete(profile, stop, board, court.moves);
-    winFirst = !replaying && stopIndex === nextStop && before === 0;
-    winLine = res.stars === 3 ? `Lit in ${court.moves} ${court.moves === 1 ? 'bap' : 'baps'}, the shortest way.` : `Lit in ${court.moves} baps. Shortest is ${board.par}.`;
-    sound.win(); moth.kick('happy'); court.settle();
-    particles.burst(tmp.copy(court.bowlAt).setY(COURT.y + 0.4), 18, 1.6, 0.12, amber, 0.9, 0.7);
-    if (winFirst) {
-      nextStop = stopIndex + 1;
-      mode = 'win'; modeT = 0; winT = 0;
-      shotPos.copy(camera.cam.position); shotLook.set(lerpPos.x, lerpPos.y + T.camHeight, lerpPos.z);
-      // the embers rise from the bowl and fly to the spirit, then the piece comes back
-      setTimeout(() => court.release(tmp.set(level.spirit.x, level.spirit.y + 1.5, level.spirit.z).clone(), () => restore(stop.restore, false)), 650);
-    } else {
-      showBanner(winLine, 2800);
-      restAt = time + 1.6;
+  const chain: { family: Family; at: () => THREE.Vector3; done: () => boolean }[] = [
+    { family: 'plate', at: () => garden.plateAt, done: () => garden.gateEverOpen },
+    { family: 'crate', at: () => garden.crateAt, done: () => garden.crateHeldGate },
+    { family: 'chimney', at: () => garden.chimneyTop, done: () => garden.warpedOnce || garden.rung },
+    { family: 'bell', at: () => garden.bellAt, done: () => garden.rung },
+    { family: 'bell', at: () => garden.emberPos(2), done: () => garden.found[2] },
+    { family: 'stones', at: () => garden.emberPos(1), done: () => garden.found[1] },
+    { family: 'step', at: () => garden.emberPos(0), done: () => garden.found[0] },
+    { family: 'lantern', at: () => garden.lanternAt, done: () => garden.lit },
+  ];
+  const HINT_AFTER = [12, 25, 45]; // seconds in the garden without progress before the light points the way
+  let chainAt = -1, chainSince = 0, gardenT = 0;
+  function updateChain() {
+    let i = chain.findIndex((c) => !c.done());
+    if (i < 0) i = chain.length;
+    if (i !== chainAt) {
+      // a step just solved: quick solvers get hints later next time, slow ones sooner
+      if (chainAt >= 0 && chainAt < chain.length && i > chainAt) {
+        const f = chain[chainAt].family, took = gardenT - chainSince, b = help[f] ?? 1;
+        help[f] = took < 35 ? Math.min(2, b + 1) : took > 100 ? Math.max(0, b - 1) : b;
+        save();
+      }
+      chainAt = i; chainSince = gardenT;
     }
-    save();
+  }
+  function hintAt(): THREE.Vector3 | null {
+    if (chainAt >= chain.length) return null;
+    const c = chain[chainAt];
+    if (c.family === 'lantern') return garden.foundCount === 3 ? c.at() : null;
+    return gardenT - chainSince > HINT_AFTER[help[c.family] ?? 1] ? c.at() : null;
   }
 
-  // --- restoration: each first win brings back one named piece of Mill Terrace ---
-  const restored = new Set<Restore>();
+  // --- restoration: the lit lantern wakes the spirit, and with it the lanterns, the wheel and the mill ---
   let wheelOn = false, wheelT = 0, awake = false;
-  const SHOTS: Record<Restore, { p: THREE.Vector3; l: THREE.Vector3 }> = {
-    lantern0: { p: new THREE.Vector3(1.9, 1.7, -12.4), l: new THREE.Vector3(-0.6, 0.95, -15.5) },
-    lantern1: { p: new THREE.Vector3(-3.4, 1.8, -16.6), l: new THREE.Vector3(-0.8, 0.95, -20.2) },
-    lantern2: { p: new THREE.Vector3(7.8, 2.2, -19.9), l: new THREE.Vector3(5.0, 1.0, -17.3) },
-    wheel: { p: new THREE.Vector3(8.4, 2.4, -16.6), l: new THREE.Vector3(12.4, 0.8, -19.3) },
-    mill: { p: new THREE.Vector3(8.9, 2.7, -16.4), l: new THREE.Vector3(14.0, 2.1, -19.6) },
-    spirit: { p: new THREE.Vector3(2.9, 2.0, -14.4), l: new THREE.Vector3(2.0, 1.15, -18.5) },
-  };
-  function restore(r: Restore, instant: boolean) {
-    restored.add(r);
-    if (r.startsWith('lantern')) {
-      const lamp = level.lanterns[+r.slice(7)];
-      (lamp.glass.material as THREE.MeshBasicMaterial).color.set(PAL.emberCore);
-    }
-    if (r === 'wheel') wheelOn = true;
-    if (r === 'spirit') {
-      awake = true;
-      level.spiritEyes.forEach((e) => (e.visible = false));
-      level.spiritOpenEyes.forEach((e) => (e.visible = true));
-      (level.gateLantern.glass.material as THREE.MeshBasicMaterial).color.set(PAL.emberCore);
-      level.gateLantern.halo.material.opacity = 0.8;
-    }
-    if (instant) { if (r === 'wheel') wheelT = 10; return; }
-    sound.restore();
-    restoreShot = SHOTS[r];
-    const piece = STOPS.find((s) => s.restore === r)!.piece;
-    showBanner(r === 'spirit' ? 'The mill wakes.' : piece, 2600);
-    if (r === 'spirit') setTimeout(() => sound.wake(), 600);
-    const at = r.startsWith('lantern') ? level.lanterns[+r.slice(7)].pos : r === 'spirit' ? tmp.set(level.spirit.x, level.spirit.y + 1.6, level.spirit.z) : null;
-    if (at) particles.burst(at.clone(), 16, 1.4, 0.12, amber, 0.8, 0.6);
-    if (r === 'spirit') for (let i = 0; i < 40; i++) particles.emit(tmp.set(level.spirit.x, level.spirit.y + 1.6, level.spirit.z), new THREE.Vector3((Math.random() - 0.5) * 4, Math.random() * 4, (Math.random() - 0.5) * 4), 0.1, 2.2, petalCol, 0.9, 1, 1);
+  function restoreAll(instant: boolean) {
+    for (const lamp of level.lanterns) (lamp.glass.material as THREE.MeshBasicMaterial).color.set(PAL.emberCore);
+    wheelOn = true; awake = true;
+    level.spiritEyes.forEach((e) => (e.visible = false));
+    level.spiritOpenEyes.forEach((e) => (e.visible = true));
+    (level.gateLantern.glass.material as THREE.MeshBasicMaterial).color.set(PAL.emberCore);
+    level.gateLantern.halo.material.opacity = 0.8;
+    if (instant) { wheelT = 10; return; }
+    sound.restore(); setTimeout(() => sound.wake(), 600);
+    for (const lamp of level.lanterns) particles.burst(lamp.pos.clone(), 12, 1.2, 0.12, amber, 0.8, 0.6);
+    for (let i = 0; i < 40; i++) particles.emit(tmp.set(level.spirit.x, level.spirit.y + 1.6, level.spirit.z), new THREE.Vector3((Math.random() - 0.5) * 4, Math.random() * 4, (Math.random() - 0.5) * 4), 0.1, 2.2, petalCol, 0.9, 1, 1);
   }
-  for (let i = 0; i < Math.min(nextStop, STOPS.length); i++) restore(STOPS[i].restore, true);
+  if (garden.lit) restoreAll(true);
+  function finale() {
+    playShots([
+      { p: new THREE.Vector3(-0.8, 2.5, -43.0), l: new THREE.Vector3(1.2, 1.6, -47.3), dur: 3.4, start: () => showBanner('The spirit lantern glows.', 2600) },
+      { p: new THREE.Vector3(2.9, 2.0, -14.4), l: new THREE.Vector3(2.0, 1.15, -18.5), dur: 4.2, cut: true, start: () => { restoreAll(false); showBanner('The spirit wakes. Thank you, Kettle.', 3600); } },
+    ]);
+  }
 
   // --- loop ---
   let acc = 0, last = performance.now(), time = 0;
@@ -404,8 +363,8 @@ async function main() {
   let camOverride: { p: THREE.Vector3; t: THREE.Vector3; rel: boolean } | null = null;
   let gatePush = 0;
   let fps = 60;
-  const tops: { p: THREE.Vector3; top: number }[] = [];
-  let trailAcc = 0;
+  const wish = new THREE.Vector3();
+  let chimneyAcc = 0;
 
   function frame(now: number) {
     // ask for the next frame first, so one surprise can never freeze the game
@@ -470,59 +429,57 @@ async function main() {
     if (n === 5) acc = 0;
     lerpPos.lerpVectors(prevPos, curPos, acc / STEP);
 
-    // --- the spark yard ---
-    const wasNear = nearYard;
-    nearYard = court.contains(player.pos, 1.2) && player.pos.y < 2.2;
-    if (!nearYard && wasNear) yardArmed = true;
-    // a puzzle rises when Kettle comes to the yard (after the finale, only once Kettle has left and come back)
-    if (!court.board && nearYard && started && !inIntro && free && time > raiseAfter && restAt < 0 && (nextStop < STOPS.length || yardArmed)) {
-      const i = wantStop();
-      if (i >= 0) raiseBoard(i);
+    // --- the spirit garden ---
+    inGarden = garden.inGarden(player.pos);
+    if (inGarden && started && !inIntro) gardenT += dt;
+    {
+      const fwd = tmpV.set(-Math.sin(moveYaw), 0, -Math.cos(moveYaw));
+      wish.set(-fwd.z, 0, fwd.x).multiplyScalar(input.moveX).addScaledVector(fwd, input.moveY);
     }
-    if (restAt >= 0 && time > restAt) { restAt = -1; court.rest(); raiseAfter = time + 0.9; if (nextStop >= STOPS.length) yardArmed = false; }
-    court.sparkLook = nearYard ? player.pos : null;
-    court.update(dt, free && nearYard ? bapDir(1.35) : null);
-    if (nearYard && free && court.state && !court.drifting && court.busy === 0) {
-      if (input.takeAction('undo')) { if (court.undo()) { sound.undo(); recordFor(profile, court.board!).undos++; puffAt(court.spark); undoneOnce = true; stuck = 0; } }
-      if (input.takeAction('restart')) { if (court.restart()) { sound.undo(); recordFor(profile, court.board!).restarts++; puffAt(court.spark); undoneOnce = true; stuck = 0; } }
-    } else { input.takeAction('undo'); input.takeAction('restart'); }
-    input.takeAction('confirm');
-    bar.hidden = !(nearYard && free && !!court.state && started && !inIntro);
-    for (const e of court.events) {
+    garden.update(dt, player, wish, free && started && !inIntro);
+    for (const e of garden.events) {
       switch (e.type) {
-        case 'drift': sound.drift(e.tiles); break;
-        case 'key': sound.ember(e.count - 1); particles.burst(tmp.copy(court.spark).setY(COURT.y + 0.4), 10, 1.0, 0.08, amber, 0.9, 0.6); break;
-        case 'switch': sound.bell(); setTimeout(() => sound.gateSink(), 250); gateOnce = true; break;
-        case 'push': sound.push(); pushedOnce = true; break;
-        case 'stop': sound.stop(e.strength); break;
+        case 'plate': if (e.on) sound.stop(0.8); else sound.bump(); break;
+        case 'gate': if (e.open) { sound.gateSink(); particles.burst(tmp.copy(garden.gateAt).setY(1.6), 8, 1.0, 0.08, petalCol, 0.8, 0.5); } else sound.bump(); break;
+        case 'push': sound.push(); puffAt(tmp.copy(garden.crateAt).setY(0)); break;
         case 'bump': sound.bump(); break;
-        case 'ready': sound.bowlReady(); break;
-        case 'won': onWin(); break;
+        case 'crateHome': sound.undo(); puffAt(e.from.setY(0.2)); break;
+        case 'ember': sound.ember(e.count - 1); moth.kick('happy'); particles.burst(e.at, 14, 1.2, 0.1, amber, 0.9, 0.6); save(); break;
+        case 'warp': sound.floatBack(); for (let i = 0; i < 14; i++) particles.emit(tmp.copy(e.from).setY(e.from.y + 0.3), new THREE.Vector3((Math.random() - 0.5) * 0.8, 1 + Math.random(), (Math.random() - 0.5) * 0.8), 0.18, 1.2, smokeCol, 0.6, 1.4, 0.3); break;
+        case 'bell':
+          sound.bell();
+          if (e.first) {
+            save();
+            playShots([{ p: new THREE.Vector3(0.4, 4.4, -37.0), l: new THREE.Vector3(-3.6, 1.2, -42.4), dur: 3.6 }]);
+          }
+          break;
+        case 'rise': sound.rise(); break;
+        case 'door': setTimeout(() => sound.gateSink(), 1800); break;
+        case 'deliver': sound.ember(e.count + 1); particles.burst(e.at, 10, 1.0, 0.1, amber, 0.9, 0.6); save(); break;
+        case 'lit': sound.win(); moth.kick('happy'); save(); setTimeout(finale, 900); break;
       }
     }
-    // a warm trail behind the zipping spark
-    if (court.drifting) {
-      trailAcc += dt;
-      while (trailAcc > 0.025) { trailAcc -= 0.025; particles.emit(tmp.copy(court.spark).setY(COURT.y + 0.28), new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.25 + Math.random() * 0.3, (Math.random() - 0.5) * 0.3), 0.07, 0.5, amber, 0.8, 0.4, 2); }
+    garden.events.length = 0;
+    // chimneys breathe a thin curl of smoke
+    chimneyAcc += dt;
+    if (chimneyAcc > 0.35) {
+      chimneyAcc = 0;
+      for (const c of garden.chimneyTops) particles.emit(tmp.set(c.x + (Math.random() - 0.5) * 0.2, c.y + 0.15, c.z + (Math.random() - 0.5) * 0.2), new THREE.Vector3((Math.random() - 0.5) * 0.15, 0.45 + Math.random() * 0.2, (Math.random() - 0.5) * 0.15), 0.16, 2.2, smokeCol, 0.35, 2.2, 0.2);
     }
-    if (mode === 'win') {
-      winT += dt;
-      // the restoration shot holds a moment, then the camera comes back to Kettle and the result shows
-      if (restoreShot && winT > 4.6) restoreShot = null;
-      if (winT > 5.0) {
-        mode = 'free'; modeT = 0;
-        if (nextStop >= STOPS.length && !finaleShown) { finaleShown = true; showBanner('The mill is awake. Thank you, Kettle.', 3600); }
-        else showBanner(winLine, 2800);
-        restAt = time + 0.4;
+    updateChain();
+    if (mode === 'shot' && shots.length) {
+      shotT += dt;
+      if (shotT > shots[0].dur) {
+        shots.shift(); shotT = 0;
+        if (shots.length) beginShot();
+        else {
+          restoreShot = null; mode = 'free'; modeT = 0;
+          if (cutBack) { shotW = 0; cutBack = false; camera.snap(player.pos, player.facing); }
+          if (garden.lit && !finaleShown) { finaleShown = true; }
+        }
       }
     }
-    // a piece that rises (or snaps back on undo) where Kettle stands lifts Kettle onto its top
-    for (const s of court.solidTops(tops)) {
-      if (Math.abs(player.pos.x - s.p.x) < 0.42 && Math.abs(player.pos.z - s.p.z) < 0.42 && player.pos.y < s.top - 0.08 && player.pos.y > s.top - 1.2) {
-        player.body.setTranslation({ x: player.pos.x, y: s.top + 0.75, z: player.pos.z }, true);
-        player.pos.y = s.top + 0.05; prevPos.copy(player.pos); curPos.copy(player.pos);
-      }
-    }
+    input.takeAction('confirm');
     level.syncDynamics();
     level.update(time, dt);
     SHARED.uPlayer.value.copy(lerpPos);
@@ -553,10 +510,11 @@ async function main() {
       (moth.blob.material as THREE.MeshBasicMaterial).opacity = 0.5 * Math.max(0, 1 - h / 3) * (1 - player.float01);
     }
 
-    // the beacon: over the spark yard while rounds wait there
+    // the beacon: over the garden arch until Kettle is inside; in the garden, over the next step only when a
+    // hint is due (how soon depends on how that tool went last time), and over the lantern once all embers are found
     {
-      const want = free && nextStop < STOPS.length && !nearYard ? (court.state ? court.spark : courtCentre) : null;
-      goalAt = want ? courtCentre : null;
+      const want = !free || garden.lit ? null : !inGarden ? garden.archAt : hintAt();
+      goalAt = !garden.lit ? (!inGarden ? garden.archAt : garden.foundCount === 3 ? garden.lanternAt : want) : null;
       const m = beacon.material as THREE.MeshBasicMaterial;
       if (want) {
         beaconAt.lerp(want, beaconAt.lengthSq() ? Math.min(1, dt * 3) : 1);
@@ -569,14 +527,14 @@ async function main() {
     }
 
     // the spirit warms with every round and wakes with the last; lit lanterns flicker softly
-    (level.spiritGlow.material as THREE.MeshBasicMaterial).color.lerpColors(glowCold, glowWarm, restored.size / STOPS.length);
+    (level.spiritGlow.material as THREE.MeshBasicMaterial).color.lerpColors(glowCold, glowWarm, garden.lit ? 1 : garden.foundCount / 4);
     level.spiritMesh.scale.set(1 + Math.sin(time * 1.2) * 0.012, 1 - Math.sin(time * 1.2) * 0.015 * (awake ? 2 : 1), 1 + Math.sin(time * 1.2) * 0.012);
     level.spiritMesh.rotation.z = awake ? Math.sin(time * 2) * 0.04 : Math.sin(time * 0.6) * 0.015;
     if (wheelOn) { wheelT += dt; level.wheel.rotation.x -= dt * Math.min(1, wheelT * 0.3) * 0.9; }
-    for (let i = 0; i < level.lanterns.length; i++) if (restored.has(`lantern${i}` as Restore)) level.lanterns[i].halo.material.opacity = 0.75 + Math.sin(time * 2.3 + i) * 0.08;
+    if (awake) for (let i = 0; i < level.lanterns.length; i++) level.lanterns[i].halo.material.opacity = 0.75 + Math.sin(time * 2.3 + i) * 0.08;
     for (const w of level.millWindows) {
       const m = w.material as THREE.MeshBasicMaterial;
-      m.opacity = THREE.MathUtils.damp(m.opacity, restored.has('mill') ? 0.9 + Math.sin(time * 1.7) * 0.04 : 0, 1.5, dt);
+      m.opacity = THREE.MathUtils.damp(m.opacity, awake ? 0.9 + Math.sin(time * 1.7) * 0.04 : 0, 1.5, dt);
       w.visible = m.opacity > 0.01;
     }
 
@@ -618,8 +576,8 @@ async function main() {
       const base = camOverride.rel ? lerpPos : ORIGIN;
       camera.cam.position.copy(camOverride.p).add(base); camera.cam.lookAt(tmpV.copy(camOverride.t).add(base));
     } else {
-      // in the yard the camera rises a little and steps back, so the stones around the spark stay in view
-      camera.overview = THREE.MathUtils.damp(camera.overview, nearYard && court.state ? 1 : 0, 2, dt);
+      // in the garden the camera rises a little and steps back, so more of each riddle stays in view
+      camera.overview = THREE.MathUtils.damp(camera.overview, inGarden ? 0.5 : 0, 2, dt);
       camera.update(dt, lerpPos, player.vel, renderFacing, look);
       if (inIntro) {
         introFollow.copy(camera.cam.position); introLook.set(lerpPos.x, lerpPos.y + T.camHeight, lerpPos.z);
@@ -659,7 +617,7 @@ async function main() {
     if (!mapped) { mapped = true; minimap.capture(renderer, scene, [level.group]); }
     if (!minimap.el.hidden) minimap.update(dt, lerpPos, renderFacing, camera.yaw, goalAt, level.spirit);
   }
-  let finaleShown = nextStop >= STOPS.length;
+  let finaleShown = garden.lit;
   function puffAt(p: THREE.Vector3) {
     for (let i = 0; i < 10; i++) particles.emit(tmp.set(p.x, p.y + 0.25, p.z), new THREE.Vector3((Math.random() - 0.5) * 1.4, Math.random() * 0.8, (Math.random() - 0.5) * 1.4), 0.14, 0.8, dustCol, 0.5, 1.6, 0.6);
   }
@@ -707,8 +665,8 @@ async function main() {
       case 'land': sound.land(e.strength); moth.kick('land', e.strength); break;
       case 'step': sound.step(level.surfaces.get(player.groundHandle) ?? 'grass'); break;
       case 'bap': {
-        const sent = bapSpark();
-        sound.bap(e.hit || sent); moth.kick('bap');
+        const rang = mode === 'free' && garden.bap(player);
+        sound.bap(e.hit || rang); moth.kick('bap');
         const g = level.gate.centre;
         if (!level.gate.opening && Math.hypot(player.pos.x - g.x, player.pos.z - g.z) < 1.5 && Math.abs(player.pos.y - (g.y - 0.5)) < 1) openGate();
         break;
@@ -746,19 +704,20 @@ async function main() {
 
   // test hooks for automated screenshots
   (window as any).__moth = {
-    player, camera, begin, level, breakPot, moth, renderer, zcheck, showLineup, court, input,
+    player, camera, begin, level, breakPot, moth, renderer, zcheck, showLineup, garden, input,
     setYaw: (y: number) => (camera.yaw = y),
     skipIntro: () => (introT = INTRO),
     freeCam: (p: number[] | null, t?: number[], rel = false) => { camOverride = p ? { p: new THREE.Vector3(...p), t: new THREE.Vector3(...t!), rel } : null; },
     teleport: (x: number, y: number, z: number, facing: number) => {
       player.body.setTranslation({ x, y: y + 0.4, z }, true); player.pos.set(x, y, z); player.vel.set(0, 0, 0); player.facing = facing;
+      player.floating = false; player.float01 = 0;
       prevPos.copy(player.pos); curPos.copy(player.pos);
       camera.snap(player.pos, facing);
     },
-    drift: (d: Dir) => court.drift(d), bapDir, variant: (i: number, v: number) => { stopIndex = i; court.load(STOPS[i].variants[v]); }, solve: async () => (await import('./court/rules')).solve(court.board!, court.state!),
     state: () => ({ pos: player.pos.toArray().map((v) => +v.toFixed(2)), grounded: player.grounded, floating: player.floating,
-      mode, stop: stopIndex, next: nextStop, board: court.board?.variantId, moves: court.moves, mask: court.state?.mask, restored: [...restored],
-      step: stepIndex, baps, stuck, busy: +court.busy.toFixed(2), drifting: court.drifting, gate: level.gate.opening, fps: Math.round(fps), stars: rating(court.moves, court.board?.par ?? 0),
+      mode, found: garden.foundCount, carried: garden.carried, delivered: garden.delivered, rung: garden.rung, lit: garden.lit,
+      gateOpen: garden.gateEverOpen, held: garden.crateHeldGate, crate: [garden.crateAt.x, garden.crateAt.z].map((v) => +v.toFixed(2)), chain: chainAt, help,
+      step: stepIndex, gate: level.gate.opening, fps: Math.round(fps), awake,
       calls: renderer.info.render.calls, tris: renderer.info.render.triangles, intro: +introT.toFixed(2), pr }),
   };
   if (params.has('autostart')) begin();

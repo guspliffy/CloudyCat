@@ -102,23 +102,4 @@ body { font-family: var(--body); color: var(--ink); touch-action: none; user-sel
 @media (prefers-reduced-motion: reduce) { #coach, #banner, #start { transition: none; } }
 @media (max-width: 700px), (max-height: 500px) { #banner { top: max(22%, calc(env(safe-area-inset-top, 0px) + 124px)); } }
 
-/* The spark yard: two quiet buttons at the bottom while Kettle is by the spark */
-#courtbar {
-  position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); transform: translateX(-50%);
-  display: flex; gap: 10px; pointer-events: auto; width: max-content; white-space: nowrap;
-}
-#courtbar button {
-  display: flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; padding: 8px 14px;
-  font: 700 0.9rem var(--body); color: var(--ink); background: var(--glass); cursor: pointer;
-  box-shadow: 0 3px 12px rgba(40, 28, 50, 0.22); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-}
-#courtbar button:hover { background: rgba(34, 30, 51, 0.55); }
-#courtbar button:active { transform: translateY(1px); }
-#courtbar kbd { font: 700 0.72rem var(--body); padding: 1px 6px; border-radius: 5px; background: rgba(247, 239, 224, 0.9); color: #2a2438; }
-/* on a touch screen the thumbs own the bottom corners, so the two buttons sit at the top, under the goal */
-@media (pointer: coarse) {
-  #courtbar { top: calc(env(safe-area-inset-top, 0px) + 50px); bottom: auto; left: calc(env(safe-area-inset-left, 0px) + 16px); transform: none; }
-  #courtbar kbd { display: none; }
-  #courtbar button { padding: 9px 14px; }
-}
 

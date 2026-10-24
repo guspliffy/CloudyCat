@@ -6,7 +6,8 @@ import { Meadow, Tuft, Flower } from './world/meadow';
 import { Kit, G } from './world/kit';
 import { stoneTex, tileTex, plankTex, plasterTex, flagTex, boxUV } from './world/textures';
 import { mulberry } from './world/sky';
-import { COURT, COURT_RECT } from './court/court';
+import { GARDEN, ARCH, POND } from './garden/layout';
+import { Garden } from './garden/garden';
 
 // Mill Terrace (docs/ART-GUIDE.md section 3). World: X east, -Z north, Y up, metres.
 // The cottage garden is a terrace raised 1.6 m. From the start you look over its low parapet, through the
@@ -23,6 +24,8 @@ const TERRACE = { x0: -10, x1: 9.3, z0: -9.5, z1: 7.8 };
 const RAMP = { x0: -9.8, x1: -7.2, z0: -16, z1: -10 };
 const RIVER = { x0: 9.5, x1: 13.5, bed: -1.2, water: -0.35 };
 const PLAY = { x0: -10.4, x1: 21.4, z0: -27.6, z1: 8 };
+// the spirit garden north of the court is flat too
+const FLAT2 = { x0: GARDEN.x0 - 0.3, x1: GARDEN.x1 + 0.3, z0: GARDEN.z0 - 0.3, z1: PLAY.z0 };
 
 function hash2(x: number, z: number) { const h = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return h - Math.floor(h); }
 function vnoise(x: number, z: number) {
@@ -46,12 +49,16 @@ export function heightAt(x: number, z: number) {
   }
   // hills beyond the play area
   const dx = Math.max(PLAY.x0 - x, 0, x - PLAY.x1), dz = Math.max(PLAY.z0 - z, 0, z - PLAY.z1);
-  const d = Math.hypot(dx, dz);
+  const dx2 = Math.max(FLAT2.x0 - x, 0, x - FLAT2.x1), dz2 = Math.max(FLAT2.z0 - z, 0, z - FLAT2.z1);
+  const d = Math.min(Math.hypot(dx, dz), Math.hypot(dx2, dz2));
   if (d > 0) {
     const valley = smooth(Math.abs(x - 11.5), 3, 18);
     const hill = (vnoise(x * 0.035, z * 0.035) * 9 + vnoise(x * 0.09 + 3, z * 0.09) * 3 + d * 0.06) * smooth(d, 2, 30) * valley;
     h += hill;
   }
+  // the garden pond: a soft bowl
+  const pr = Math.hypot(x - POND.x, z - POND.z);
+  if (pr < POND.r + 0.2) h = Math.min(h, POND.bed * (1 - smooth(pr, POND.r - 1.2, POND.r + 0.2)));
   // the river channel runs the whole valley north to south
   const inRiver = smooth(x, RIVER.x0 - 0.2, RIVER.x0 + 0.3) * (1 - smooth(x, RIVER.x1 - 0.3, RIVER.x1 + 0.2));
   h = h * (1 - inRiver) + RIVER.bed * inRiver;
@@ -89,30 +96,31 @@ export class Level {
   gate!: { leaves: THREE.Group[]; collider: RAPIER.Collider; open: number; opening: boolean; centre: THREE.Vector3 };
   anim: ((t: number, dt: number) => void)[] = [];
   sparrows: { obj: THREE.Group; home: THREE.Vector3; t: number; away: boolean }[] = [];
-  inWater = (p: THREE.Vector3) => p.x > RIVER.x0 - 0.05 && p.x < RIVER.x1 + 0.05 && p.y < -0.1;
+  inWater = (p: THREE.Vector3) => (p.x > RIVER.x0 - 0.05 && p.x < RIVER.x1 + 0.05 && p.y < -0.1) || (Math.hypot(p.x - POND.x, p.z - POND.z) < POND.r - 0.2 && p.y < -0.12);
+  spiritGarden!: Garden;
 
-  private kit = new Kit();
+  kit = new Kit();
   foliage = new Foliage();
   private meadow = new Meadow();
   private clearRects: [number, number, number, number][] = [];
   private paths: Seg[] = [];
   private rand = mulberry(2024);
-  private T = {
+  T = {
     stone: stoneTex(), tile: tileTex(), plank: plankTex(), plaster: plasterTex(), flag: flagTex(),
   };
-  private M!: Record<string, THREE.Material>;
+  M!: Record<string, THREE.Material>;
 
-  constructor(private world: RAPIER.World, private phone = false) {}
+  constructor(public world: RAPIER.World, private phone = false) {}
 
   // ---------- physics helpers ----------
-  private collBox(cx: number, cy: number, cz: number, w: number, h: number, d: number, surface: Surface, rotY = 0, block = false) {
+  collBox(cx: number, cy: number, cz: number, w: number, h: number, d: number, surface: Surface, rotY = 0, block = false) {
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, 0));
     const col = this.world.createCollider(RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d / 2).setTranslation(cx, cy, cz).setRotation(q));
     this.surfaces.set(col.handle, surface);
     if (block) this.camBlock.add(col.handle);
     return col;
   }
-  private collCyl(cx: number, cy: number, cz: number, r: number, h: number, surface: Surface, block = false) {
+  collCyl(cx: number, cy: number, cz: number, r: number, h: number, surface: Surface, block = false) {
     const col = this.world.createCollider(RAPIER.ColliderDesc.cylinder(h / 2, r).setTranslation(cx, cy, cz));
     this.surfaces.set(col.handle, surface);
     if (block) this.camBlock.add(col.handle);
@@ -148,7 +156,7 @@ export class Level {
     this.kit.addObject(o);
   }
 
-  private clear(x0: number, z0: number, x1: number, z1: number) { this.clearRects.push([Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1)]); }
+  clear(x0: number, z0: number, x1: number, z1: number) { this.clearRects.push([Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1)]); }
   private isClear(x: number, z: number) {
     for (const [a, b, c, d] of this.clearRects) if (x > a && x < c && z > b && z < d) return false;
     return true;
@@ -164,7 +172,7 @@ export class Level {
   }
 
   /** A textured box baked into the kit, with an optional collider. */
-  private box(cx: number, cy: number, cz: number, w: number, h: number, d: number, mat: THREE.Material, surface?: Surface, opts: { rotY?: number; unit?: number; block?: boolean } = {}) {
+  box(cx: number, cy: number, cz: number, w: number, h: number, d: number, mat: THREE.Material, surface?: Surface, opts: { rotY?: number; unit?: number; block?: boolean } = {}) {
     const g = boxUV(G.box(w, h, d), w, h, d, opts.unit ?? 1);
     this.kit.add(g, mat, { x: cx, y: cy, z: cz }, [0, opts.rotY ?? 0, 0]);
     if (surface) return this.collBox(cx, cy, cz, w, h, d, surface, opts.rotY ?? 0, opts.block);
@@ -191,7 +199,8 @@ export class Level {
     this.cottage();
     this.garden();
     this.court();
-    this.puzzleCourt();
+    this.spiritGarden = new Garden(this, glowTexture());
+    this.group.add(this.spiritGarden.group);
     this.riverSide();
     this.boundaries();
     this.scenery();
@@ -208,7 +217,9 @@ export class Level {
     line([[-0.4, -4.2], [-3.5, -6.8], [-7.0, -8.6], [-8.5, -10.2]]); // west, to the bank
     // court: from the steps to the hearth, the shed, the bridge; the bank back up
     line([[0, -12.5], [0.5, -14.6], [1.6, -16.5]]);
-    line([[0.4, -13.6], [COURT_RECT.x0 - 0.1, COURT.cz]]); // to the puzzle court
+    line([[-1.8, -16.2], [-0.6, -21.4], [0, -25.0], [0, -27.9]]); // to the spirit garden
+    line([[0, -36.0], [0.3, -39.5], [0.8, -43.6], [1.0, -45.0]]); // garden: gate to the dais
+    line([[0.3, -39.5], [1.0, -39.4]]); line([[0.6, -41.6], [-0.3, -41.5]]);
     line([[0.5, -14.6], [-1.8, -16.2], [-3.4, -17.4]]);
     line([[2.6, -16.6], [5.0, -18.8], [7.4, -22.4], [9.2, -24.5]]);
     line([[-8.5, -10.2], [-8.5, -16.2], [-6.0, -15.8], [-1.8, -16.2]]);
@@ -217,7 +228,7 @@ export class Level {
 
   // ---------- ground ----------
   private terrain() {
-    const inner = { x0: -12, x1: 24, z0: -30, z1: 10, step: 0.5 };
+    const inner = { x0: -12, x1: 24, z0: -53, z1: 10, step: 0.5 };
     const nx = Math.round((inner.x1 - inner.x0) / inner.step) + 1, nz = Math.round((inner.z1 - inner.z0) / inner.step) + 1;
     const pos: number[] = [], col: number[] = [], idx: number[] = [];
     const c = new THREE.Color();
@@ -280,6 +291,9 @@ export class Level {
     const water = new THREE.Mesh(new THREE.PlaneGeometry(RIVER.x1 - RIVER.x0 + 0.8, 320, 1, 1), waterMaterial());
     water.rotation.x = -Math.PI / 2; water.position.set((RIVER.x0 + RIVER.x1) / 2, RIVER.water, -20);
     this.group.add(water);
+    const pond = new THREE.Mesh(new THREE.CircleGeometry(POND.r - 0.05, 48), waterMaterial(POND));
+    pond.rotation.x = -Math.PI / 2; pond.position.set(POND.x, POND.water, POND.z);
+    this.group.add(pond);
   }
 
   // ---------- the terrace: wall, parapet, gate, steps ----------
@@ -732,38 +746,6 @@ export class Level {
     this.tree(-11.4, 0, -14.2, 0.8, 0.03);
   }
 
-  // ---------- the puzzle court: a flagstone yard on the east lawn where Spark Trail's boards rise ----------
-  private puzzleCourt() {
-    const M = this.M, R = COURT_RECT, t = COURT.tile, n = COURT.n;
-    const w = R.x1 - R.x0, d = R.z1 - R.z0, cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2;
-    // bedding slab with dark joints, then 36 flagstones, two tones scattered so the grid reads at a glance
-    this.box(cx, 0.025, cz, w - 0.3, 0.15, d - 0.3, pmat('#A79C8C'), undefined, { unit: 1.2 });
-    // three close tones of pale sandstone, each stone with a softly rounded top edge
-    const flags = [pmat('#EAE0CC'), pmat('#E2D6BE'), pmat('#D9CCB2')];
-    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
-      const x = COURT.cx + (c - (n - 1) / 2) * t, z = COURT.cz + (r - (n - 1) / 2) * t;
-      const h = hash2(r * 3.1 + 0.5, c * 5.3 + 0.2);
-      const mat = flags[Math.floor(h * 2.999)];
-      this.box(x, COURT.y - 0.045, z, t - 0.07, 0.07, t - 0.07, mat);
-      this.box(x, COURT.y - 0.005, z, t - 0.11, 0.01, t - 0.11, mat);
-      if (h > 0.82) this.kit.add(G.ico(0.05, 0), M.moss, { x: x + (t / 2 - 0.04) * (h > 0.9 ? 1 : -1), y: COURT.y - 0.012, z: z + t / 2 - 0.04 }, [0, 0, 0], [1.6, 0.35, 1.2]);
-    }
-    // a low kerb of dressed stone round the yard, one step high, mossy at the corners
-    const k = 0.22, kh = 0.21;
-    this.box(cx, kh / 2 - 0.02, R.z0 + k / 2, w, kh, k, M.stone, undefined, { unit: 1.2 });
-    this.box(cx, kh / 2 - 0.02, R.z1 - k / 2, w, kh, k, M.stone, undefined, { unit: 1.2 });
-    this.box(R.x0 + k / 2, kh / 2 - 0.02, cz, k, kh, d - 2 * k, M.stone, undefined, { unit: 1.2 });
-    this.box(R.x1 - k / 2, kh / 2 - 0.02, cz, k, kh, d - 2 * k, M.stone, undefined, { unit: 1.2 });
-    for (const [x, z] of [[R.x0, R.z0], [R.x1, R.z0], [R.x0, R.z1], [R.x1, R.z1]]) {
-      this.kit.add(G.ico(0.17, 1), M.moss, { x: x + Math.sign(cx - x) * 0.12, y: kh - 0.03, z: z + Math.sign(cz - z) * 0.12 }, [0, 0, 0], [1.4, 0.35, 1.4]);
-    }
-    // two flat stepping stones lead in from the path on the west side
-    for (const [x, s] of [[R.x0 - 0.35, 0.34], [R.x0 - 0.95, 0.3]] as const) this.kit.add(G.cyl(s, s + 0.02, 0.06, 12), M.stoneDark, { x, y: 0.02, z: COURT.cz }, [0, x, 0], [1, 1, 0.8]);
-    // the floor Kettle stands on before and after a round
-    this.collBox(cx, COURT.y / 2, cz, w, COURT.y, d, 'stone');
-    this.clear(R.x0 - 0.2, R.z0 - 0.2, R.x1 + 0.2, R.z1 + 0.2);
-  }
-
   private buildSpirit() {
     // The hearth spirit: a round, sleepy, kiln-fired pot with a lid hat, moss shawl and a sprout. Original to this game.
     const g = new THREE.Group();
@@ -905,11 +887,12 @@ export class Level {
     H.hedge(-9.9, 7.4, -9.9, -9.0, Y, 1.5, 0.9);
     H.hedge(8.9, -9.2, 8.9, 3.0, Y, 1.2, 0.8, PAL.daisy);
     H.hedge(-10.1, -10.5, -10.1, -27.2, 0, 1.9, 1.0);
-    H.hedge(-10.1, -27.3, 9.2, -27.3, 0, 1.9, 1.0, PAL.lavender);
+    H.hedge(-10.1, -27.3, ARCH.x - ARCH.half - 0.35, -27.3, 0, 1.9, 1.0, PAL.lavender);
+    H.hedge(ARCH.x + ARCH.half + 0.35, -27.3, 9.2, -27.3, 0, 1.9, 1.0, PAL.lavender);
     H.hedge(14.2, -27.3, 21.2, -27.3, 0, 1.7, 1.0);
     H.hedge(21.2, -27.3, 21.2, -8.2, 0, 1.7, 1.0, PAL.hollyhock);
     H.hedge(14.2, -8.2, 21.2, -8.2, 0, 1.7, 1.0);
-    for (const [x0, z0, x1, z1] of [[-10.6, 7.0, 4.4, 8.0], [-10.6, -9.4, -9.3, 7.8], [8.4, -9.6, 9.6, 3.4], [-10.7, -27.8, -9.5, -10], [-10.7, -27.9, 9.6, -26.7], [13.8, -27.9, 21.8, -26.7], [20.6, -27.9, 21.8, -7.6], [13.8, -8.8, 21.8, -7.6]] as const) this.clear(x0, z0, x1, z1);
+    for (const [x0, z0, x1, z1] of [[-10.6, 7.0, 4.4, 8.0], [-10.6, -9.4, -9.3, 7.8], [8.4, -9.6, 9.6, 3.4], [-10.7, -27.8, -9.5, -10], [-10.7, -27.9, -1.2, -26.7], [1.2, -27.9, 9.6, -26.7], [13.8, -27.9, 21.8, -26.7], [20.6, -27.9, 21.8, -7.6], [13.8, -8.8, 21.8, -7.6]] as const) this.clear(x0, z0, x1, z1);
     // invisible walls a little outside the hedges; they also keep the camera out of the leaves
     const wall = (x0: number, z0: number, x1: number, z1: number) => {
       const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = Math.max(0.3, Math.abs(x1 - x0)), d = Math.max(0.3, Math.abs(z1 - z0));
@@ -918,7 +901,8 @@ export class Level {
     wall(-10.5, 7.9, 9.5, 8.2);
     wall(-10.6, -27.8, -10.3, 8.2);
     wall(9.25, -9.4, 9.55, 8.2);
-    wall(-10.6, -27.9, 22, -27.6);
+    wall(-10.6, -27.9, ARCH.x - ARCH.half - 0.1, -27.6);
+    wall(ARCH.x + ARCH.half + 0.1, -27.9, 22, -27.6);
     wall(21.6, -27.9, 21.9, -7.8);
     wall(13.6, -7.8, 21.9, -7.5);
   }
@@ -929,15 +913,15 @@ export class Level {
     for (let i = 0; i < (this.phone ? 26 : 48); i++) {
       const side = i % 4;
       let x = 0, z = 0;
-      if (side === 0) { x = -16 + r() * 44; z = -31 - r() * 14; }
-      if (side === 1) { x = -14 - r() * 14; z = -30 + r() * 40; }
+      if (side === 0) { x = -16 + r() * 44; z = -54 - r() * 14; if (x > 14.5) z += 22; }
+      if (side === 1) { x = -14 - r() * 14; z = -54 + r() * 64; }
       if (side === 2) { x = -16 + r() * 26; z = 11 + r() * 14; }
       if (side === 3) { x = 24 + r() * 14; z = -32 + r() * 34; }
       this.tree(x, heightAt(x, z), z, 0.9 + r() * 0.6, (r() - 0.5) * 0.04, false);
     }
   }
 
-  private tree(x: number, y: number, z: number, size = 1, tint = 0, collide = true) {
+  tree(x: number, y: number, z: number, size = 1, tint = 0, collide = true) {
     const t = this.foliage.tree(x, y, z, size, tint);
     if (collide) this.collCyl(x, y + 1.2 * size, z, t.r + 0.05, 2.4 * size, 'wood');
     this.clear(x - 0.5, z - 0.5, x + 0.5, z + 0.5);
@@ -959,13 +943,14 @@ export class Level {
 
     const tufts: Tuft[] = [], flowers: Flower[] = [];
     const r = mulberry(77);
-    const want = this.phone ? 9000 : 26000;
-    const area = { x0: -11, x1: 22, z0: -28.5, z1: 9 };
+    const want = this.phone ? 12000 : 36000;
+    const area = { x0: -11, x1: 22, z0: -50.5, z1: 9 };
     let tries = 0;
     const flowerCols = [PAL.daisy, PAL.daisy, PAL.buttercup, PAL.buttercup, PAL.poppy, PAL.lavender, PAL.hollyhock];
     while (tufts.length < want && tries++ < want * 4) {
       const x = area.x0 + r() * (area.x1 - area.x0), z = area.z0 + r() * (area.z1 - area.z0);
       if (x > RIVER.x0 - 0.5 && x < RIVER.x1 + 0.4) continue;
+      if (z < -27.6 && (x < GARDEN.x0 || x > GARDEN.x1)) continue;
       if (!this.isClear(x, z)) continue;
       const pd = this.pathDist(x, z);
       if (pd < 0.5 + vnoise(x * 2, z * 2) * 0.25) continue;
@@ -980,6 +965,7 @@ export class Level {
     for (let i = 0; i < outerWant; i++) {
       const a = r() * Math.PI * 2, d = 2 + r() * 14;
       const x = 5.5 + Math.cos(a) * (17 + d), z = -10 + Math.sin(a) * (20 + d);
+      if (x > GARDEN.x0 - 1 && x < GARDEN.x1 + 1 && z < -27 && z > GARDEN.z0 - 1) continue;
       if (x > RIVER.x0 - 0.5 && x < RIVER.x1 + 0.4) continue;
       tufts.push({ x, y: heightAt(x, z), z, s: 0.3 + r() * 0.2, tint: 0.3 });
     }
@@ -1072,7 +1058,7 @@ export function glowTexture() {
   return glowTex;
 }
 
-function waterMaterial() {
+function waterMaterial(pond?: { x: number; z: number; r: number }) {
   const m = new THREE.ShaderMaterial({
     fog: true, transparent: true,
     uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
@@ -1092,10 +1078,10 @@ function waterMaterial() {
       float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f); return mix(mix(h2(i), h2(i+vec2(1,0)), f.x), mix(h2(i+vec2(0,1)), h2(i+vec2(1,1)), f.x), f.y); }
       void main(){
-        vec2 p = vW.xz * vec2(1.6, 0.4) + vec2(0.0, -uTime * 0.7);
+        vec2 p = ${pond ? 'vW.xz * 0.9 + vec2(uTime * 0.05, -uTime * 0.08)' : 'vW.xz * vec2(1.6, 0.4) + vec2(0.0, -uTime * 0.7)'};
         float n = n2(p) * 0.6 + n2(p * 2.3 + 7.0) * 0.4;
         float streak = smoothstep(0.6, 0.66, n) * (1.0 - smoothstep(0.7, 0.8, n));
-        float edge = min(vW.x - ${RIVER.x0.toFixed(1)}, ${RIVER.x1.toFixed(1)} - vW.x);
+        float edge = ${pond ? `${pond.r.toFixed(2)} - distance(vW.xz, vec2(${pond.x.toFixed(2)}, ${pond.z.toFixed(2)}))` : `min(vW.x - ${RIVER.x0.toFixed(1)}, ${RIVER.x1.toFixed(1)} - vW.x)`};
         vec3 c = mix(uWater, uDeep, smoothstep(0.2, 1.8, edge) * 0.7);
         vec3 v = normalize(cameraPosition - vW);
         c = mix(c, uSky, pow(1.0 - v.y, 3.0) * 0.5);

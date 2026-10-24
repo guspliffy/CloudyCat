@@ -18,9 +18,7 @@ export class Input {
   private padA = false;
   private padEdge = false;
   private padB = false;
-  private padY = false;
-  private padLB = false;
-  private actions = new Set<'undo' | 'restart' | 'confirm'>();
+  private actions = new Set<'confirm'>();
   private look: [number, number] = [0, 0];
   private dragId: number | null = null;
   private dragX = 0;
@@ -43,8 +41,6 @@ export class Input {
       this.keys.add(e.code);
       if (e.code === 'Space') { this.jumpEdge = true; e.preventDefault(); }
       if (e.code === 'KeyE' || e.code === 'KeyJ' || e.code === 'KeyK') this.pawEdge = true;
-      if (e.code === 'KeyZ' || e.code === 'Backspace') { this.actions.add('undo'); e.preventDefault(); }
-      if (e.code === 'KeyR') this.actions.add('restart');
       if (e.code === 'Enter' || e.code === 'NumpadEnter') this.actions.add('confirm');
       this.onAny?.();
     });
@@ -138,11 +134,6 @@ export class Input {
       if (b && !this.padB) { this.pawEdge = true; this.padEdge = true; }
       jump ||= a; paw ||= b;
       this.padA = a; this.padB = b;
-      // in a puzzle yard Y starts over and LB steps back
-      const y = !!p.buttons[3]?.pressed, lb = !!p.buttons[4]?.pressed;
-      if (y && !this.padY) this.actions.add('restart');
-      if (lb && !this.padLB) this.actions.add('undo');
-      this.padY = y; this.padLB = lb;
       // the right stick turns the view at the same speed whatever the frame rate
       this.lookX += dz(p.axes[2] ?? 0) * 540 * dt; this.lookY += dz(p.axes[3] ?? 0) * 360 * dt;
       break;
@@ -156,10 +147,8 @@ export class Input {
   }
   takeJump() { const j = this.jumpEdge; this.jumpEdge = false; return j; }
   takePaw() { const p = this.pawEdge; this.pawEdge = false; return p; }
-  /** A yard action (undo, restart) or confirm was asked for since the last call. */
-  takeAction(a: 'undo' | 'restart' | 'confirm') { const had = this.actions.has(a); this.actions.delete(a); return had; }
-  /** Ask for an action from an on-screen button. */
-  press(a: 'undo' | 'restart' | 'confirm') { this.actions.add(a); }
+  /** Confirm was asked for since the last call. */
+  takeAction(a: 'confirm') { const had = this.actions.has(a); this.actions.delete(a); return had; }
   /** A gamepad button went down since the last call (to start the game from the pad). */
   takePadPress() { const p = this.padEdge; this.padEdge = false; return p; }
   /** The look drag since the last call. The returned pair is reused every frame. */

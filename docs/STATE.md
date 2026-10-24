@@ -1,6 +1,6 @@
 # State
 
-Updated 2026-10-24 (Spark Trail fusion: herd the sparks).
+Updated 2026-10-24 (Spark Trail fusion: the spirit garden).
 
 ## Decided
 - Game: **Moth** (repo CloudyCat), calm 3D platform-puzzler, concept in `docs/concept.html`.
@@ -46,15 +46,16 @@ Updated 2026-10-24 (Spark Trail fusion: herd the sparks).
 - Goal: a 6 s intro shot of the sleeping spirit with "Bring three embers to the sleeping spirit.", lantern dots in the corner, a light beam over the next thing to do, the spirit breathes an amber ring toward the next seed.
 - Camera pulls in front of walls and now also in front of tree canopies.
 
-## Herd the sparks: Spark Trail fused into Moth (2026-10-24)
-- Jonny asked to combine his game Spark Trail with Moth: Moth's free 3D movement and look plus Spark Trail's tasks, adaptive difficulty and worlds. Plan doc: https://claude.ai/artifact/BJt2VKpJGLeGFscsTyTtBz. Jonny: "go for it", he judges after playing a few rounds.
-- First try (puzzle court: step on and Kettle itself drifts on a board, fixed camera) was judged "just Sparky in Moth's world". Jonny wants a real fusion that keeps free third-person play. He picked **herd the sparks** (2026-10-24 11:34).
-- Now: Kettle always walks free. In the spark yard on the east lawn a little living spark (eyes, flame) sits on 6x6 flagstones. Bap it and it zips away from Kettle along the stones until something stops it (Spark Trail's rule). Walk round it (or climb on a piece) to send it another way. It gathers three embers on its way, then must stop in the ember bowl. A ring and dots on the stones show where it will stop. Obstacles, the crate and closed pens are solid, so Kettle walks round and climbs on them. The camera rises a little in the yard.
-- `src/court/rules.ts` ports Spark Trail's rules engine (walls, keys, crate, gates and switch, portals, risers, pads, currents) with a BFS solver. `boards.ts` holds 6 stops from Jonny's own catalogs (intro 0, 2, 4 and mill 500, 501, 503), each with Gentle, Standard and Challenging variants, all checked by the solver. `adapt.ts` ports adaptation.mjs (a skill band per tool family, first finishes only, intro stops capped at Standard, comfort stops one step easier). `court.ts` is the 3D court: obstacles, embers, bowl, crate, picket-pen gates and the brass bell stone, drift animation and preview rings.
-- Each first win sends the embers to the spirit and brings back one piece of the terrace, with a short camera shot: the three lanterns, the waterwheel, the mill windows, then the spirit wakes. A line says how many baps it took against the shortest; the next puzzle rises by itself. Once the spirit is awake, the yard offers puzzles below three flames again when Kettle comes back.
-- Controls in the yard: Bap (E, pad X, touch Bap) sends the spark; Undo (Z, Backspace, pad LB) and Start over (R, pad Y), also as two buttons.
-- Progress saves in localStorage `moth-court-v1`. `?fresh` resets it, `?round=N` starts at round N.
+## Spark Trail fused into Moth: the spirit garden (2026-10-24)
+- Jonny asked to combine his game Spark Trail with Moth: Moth's free 3D movement and look plus Spark Trail's tasks, adaptive difficulty and worlds. Plan doc: https://claude.ai/artifact/BJt2VKpJGLeGFscsTyTtBz.
+- Two tries were turned down. A puzzle court where Kettle drifts on a board was "just Sparky in Moth's world". Herding a living spark across a 6x6 yard was too small and still not unique. Jonny wants Spark Trail's idea, not its board: walk onto things, push buttons and boxes that unlock the next step of a riddle, bridges, teleports. He picked **spirit gardens + smoke** (2026-10-24 12:53).
+- Now: through an arch in the court's north hedge lies the spirit garden (`src/garden/`, layout numbers in `layout.ts`), about 19 x 23 m inside tall hedges. Spark Trail's pieces become things Kettle uses directly:
+  - Room 1, the brass-plate court: a plate opens the lattice gate only while something holds it down. The big crate slides one flagstone per push (walk into it, or bap it), so it can hold the plate, and it is also the only step up to the ember on the stone stack. A crate pushed against the outer hedge puffs home after a moment, so it is never lost.
+  - Room 2: hop onto the brick chimney and Kettle puffs into smoke and drifts over the wall into the walled bell yard (Spark Trail's portals). An ember waits there. Bapping the bell raises three stones out of the pond, up to the rock with the third ember, and opens the yard door.
+  - Carry the three embers onto the dais at the north end: they fly into the spirit lantern, it lights, and the spirit in the court wakes with its lanterns, the waterwheel and the mill.
+- Help adapts like Spark Trail's bands: per tool (plate, crate, chimney, bell, stones, step), the light beam points at the next step only after a wait in the garden, 12, 25 or 45 s depending on how quickly that tool went last time. Coach lines teach each tool once.
+- Progress saves in localStorage `moth-garden-v1`; `?fresh` resets it.
 
 ## Next
-- Jonny plays the six spark puzzles.
-- Then: sparks in more places of the open world (not only one yard), more tools (chimneys for portals, breeze streams, lily pads, rising stones), and the moving track of adaptive difficulty.
+- Jonny plays the spirit garden.
+- Then: more gardens (the Spark Trail tools still unused: breeze streams, lily pads that drift, rising bridges), a garden per world, and layout variants chosen by the adaptive bands.

@@ -5,6 +5,6 @@ Calm 3D platform-puzzler about a small cloud cat. Producer and only playtester: 
 - Read `docs/STATE.md` first, then `docs/CHARACTER.md` and `docs/concept.html`.
 - Stack: TypeScript, Vite, Three.js, Rapier (`@dimforge/rapier3d-compat`). `npm run dev`, `npm run build`, `npm run build:single` (one HTML file in `dist-single/`).
 - Feel numbers live in `src/tuning.ts`; `?dev` shows sliders, `?autostart` skips the start card.
-- Spark puzzles (Spark Trail rules, boards, adaptive difficulty, the spark yard) live in `src/court/`; `?fresh` clears the saved rounds, `?round=N` starts at round N.
+- The spirit garden (Spark Trail's tools as things Kettle walks, pushes and baps; adaptive hints) lives in `src/garden/`; `?fresh` clears the saved progress.
 - Design rules from Jonny: minimal, instantly clear UI; learn-by-doing lines of 8 words or fewer; no punishment, timers or failure; cute first (big eyes, soft shapes), cloud texture subtle.
 - `study/`: the 3D look study. Edit `template.html` and `designs.mjs`; `index.html` is the built page.

@@ -8,7 +8,7 @@ export class FollowCamera {
   cam: THREE.PerspectiveCamera;
   yaw = 0;
   pitch = T.camPitch;
-  /** 0 to 1: a little higher and further back, to look over a puzzle yard */
+  /** 0 to 1: a little higher and further back, to look over a garden riddle */
   overview = 0;
   private focus = new THREE.Vector3();
   private dist = T.camDistance;

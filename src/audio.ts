@@ -81,12 +81,10 @@ export class Sound {
   floatBack() { this.noiseBurst(1.0, 300, 1200, 0.07, 0.4, 'lowpass'); }
   keepsake() { [7, 4, 2, 4, 7].forEach((s, i) => this.tone(this.note(s, 784), 0.5, 0.04, 'sine', i * 0.07)); }
 
-  // --- the puzzle court ---
-  drift(tiles: number) { this.noiseBurst(0.18 + tiles * 0.07, 900, 2200, 0.07, 0.6, 'lowpass'); }
+  // --- the spirit garden ---
   stop(strength: number) { this.noiseBurst(0.14, 600, 220, 0.04 + strength * 0.06, 0.7, 'lowpass'); }
-  /** each ember of a board climbs one step higher, like Spark Trail's keys */
+  /** each ember found climbs one step higher, like Spark Trail's keys */
   ember(count: number) { this.tone(this.note(count + 1, 523), 0.9, 0.07, 'sine'); this.tone(this.note(count + 3, 523), 0.7, 0.035, 'triangle', 0.05); }
-  bowlReady() { [2, 4, 7].forEach((s, i) => this.tone(this.note(s, 392), 1.4, 0.04, 'triangle', i * 0.09, 1.5)); }
   win() { [0, 2, 4, 7].forEach((s, i) => this.tone(this.note(s, 523), 1.8, 0.06, 'triangle', i * 0.12, 2)); }
   bump() { this.noiseBurst(0.07, 400, 200, 0.04, 0.8, 'lowpass'); }
   push() { this.noiseBurst(0.3, 300, 160, 0.09, 1.4); this.tone(110, 0.18, 0.05, 'sine'); }
