@@ -34,7 +34,7 @@ export const T = {
   floatBackTime: 1.4,
 
   // camera
-  camDistance: 3.4,
+  camDistance: 3.0,
   camPitch: 0.34,
   camHeight: 0.5,
   camLag: 6,

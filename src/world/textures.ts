@@ -44,20 +44,32 @@ export function stoneTex() {
   });
 }
 
-/** Clay roof tiles: overlapping rounded rows. */
+/** Clay roof tiles: rows of rounded barrel tiles, each row casting a soft shadow on the one below.
+ *  One repeat is one metre: four courses of eight tiles, big enough to read cleanly from the camera. */
 export function tileTex() {
-  return canvas(128, 128, (g) => {
+  return canvas(256, 256, (g) => {
     const r = mulberry(3);
-    g.fillStyle = '#b8a0a0'; g.fillRect(0, 0, 128, 128);
-    for (let row = 0; row < 8; row++) {
-      const y = row * 16, off = (row % 2) * 8;
+    const TW = 32, CH = 64;
+    g.fillStyle = 'rgb(150,112,112)'; g.fillRect(0, 0, 256, 256);
+    for (let row = 0; row < 4; row++) {
+      const y = row * CH, off = (row % 2) * (TW / 2);
       for (let i = -1; i < 9; i++) {
-        const tone = 228 + Math.floor(r() * 27);
-        g.fillStyle = `rgb(${tone},${tone - 10},${tone - 14})`;
-        g.beginPath(); g.ellipse(i * 16 + off + 8, y + 9, 8, 10, 0, 0, Math.PI); g.lineTo(i * 16 + off, y); g.lineTo(i * 16 + off + 16, y); g.fill();
-        g.strokeStyle = 'rgba(120,70,80,0.35)'; g.lineWidth = 1.5;
-        g.beginPath(); g.ellipse(i * 16 + off + 8, y + 9, 8, 10, 0, 0, Math.PI); g.stroke();
+        const x = i * TW + off;
+        const tone = 222 + Math.floor(r() * 30);
+        // a barrel tile: light down the middle, darker toward both edges
+        const gr = g.createLinearGradient(x, 0, x + TW, 0);
+        gr.addColorStop(0, `rgb(${tone - 52},${tone - 74},${tone - 78})`);
+        gr.addColorStop(0.45, `rgb(${tone},${tone - 12},${tone - 18})`);
+        gr.addColorStop(0.6, `rgb(${tone},${tone - 12},${tone - 18})`);
+        gr.addColorStop(1, `rgb(${tone - 40},${tone - 62},${tone - 66})`);
+        g.fillStyle = gr;
+        g.beginPath(); g.moveTo(x + 1, y); g.lineTo(x + TW - 1, y); g.lineTo(x + TW - 1, y + CH - 8);
+        g.quadraticCurveTo(x + TW / 2, y + CH + 2, x + 1, y + CH - 8); g.closePath(); g.fill();
       }
+      // the next course overlaps this one: a soft shadow under its lower edge
+      const sh = g.createLinearGradient(0, y, 0, y + 14);
+      sh.addColorStop(0, 'rgba(70,40,70,0.45)'); sh.addColorStop(1, 'rgba(70,40,70,0)');
+      g.fillStyle = sh; g.fillRect(0, y, 256, 14);
     }
   });
 }

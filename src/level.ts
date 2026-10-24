@@ -117,6 +117,36 @@ export class Level {
     if (block) this.camBlock.add(col.handle);
     return col;
   }
+  /**
+   * A clean pitched roof: two tiled slabs with an overhang, a rounded ridge cap, plaster gable ends
+   * filling the triangle under it, dark barge boards on the gable edges and a fascia along the eaves.
+   * The ridge runs along local X (length `len`); `span` is the wall depth across it; `rotY` turns it.
+   */
+  private roof(cx: number, cy: number, cz: number, len: number, span: number, rise: number, over: number, rotY = 0) {
+    const M = this.M;
+    const o = new THREE.Group(); o.position.set(cx, cy, cz); o.rotation.y = rotY;
+    const add = (geo: THREE.BufferGeometry, mat: THREE.Material, p: [number, number, number], rx = 0, rz = 0) => {
+      const m = new THREE.Mesh(geo, mat); m.position.set(...p); m.rotation.set(rx, 0, rz); o.add(m);
+    };
+    const a = Math.atan2(rise, span / 2), run = span / 2 + over, L = run / Math.cos(a), th = 0.09, full = len + over * 2;
+    for (const s of [-1, 1]) {
+      const nY = Math.cos(a), nZ = s * Math.sin(a);
+      const mz = (s * run) / 2, my = rise - Math.tan(a) * (run / 2);
+      add(boxUV(G.box(full, th, L), full, th, L, 1), M.tile, [0, my + (nY * th) / 2, mz + (nZ * th) / 2], s * a);
+      // barge boards under the slab edge at both gable ends
+      for (const e of [-1, 1]) add(G.box(0.07, 0.18, L - 0.02), M.woodDark, [e * (full / 2 + 0.006 + (s + 1) * 0.004), my - nY * 0.09, mz - nZ * 0.09], s * a);
+      // fascia board along the eave
+      const ey = rise - Math.tan(a) * run;
+      add(G.box(full, 0.14, 0.06), M.woodDark, [0, ey - 0.05, s * (run - 0.03)]);
+    }
+    // ridge cap
+    add(G.cyl(0.085, 0.085, full + 0.06, 10), M.ridge, [0, rise + th * 0.75, 0], 0, Math.PI / 2);
+    // plaster gable triangle under the roof, with a tie beam hiding the seam to the wall below
+    add(G.gable(len, span - 0.04, rise - 0.08), M.plaster, [0, 0, 0]);
+    for (const e of [-1, 1]) add(G.box(0.1, 0.13, span + 0.12), M.woodDark, [e * (len / 2 + 0.03), 0.0, 0]);
+    this.kit.addObject(o);
+  }
+
   private clear(x0: number, z0: number, x1: number, z1: number) { this.clearRects.push([Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1)]); }
   private isClear(x: number, z: number) {
     for (const [a, b, c, d] of this.clearRects) if (x > a && x < c && z > b && z < d) return false;
@@ -147,6 +177,7 @@ export class Level {
       stoneDark: pmat('#C9BFA9', { map: T.stone }),
       plaster: pmat(PAL.plaster, { map: T.plaster }),
       tile: pmat(PAL.roof, { map: T.tile }),
+      ridge: pmat('#A65E4A'),
       plank: pmat(PAL.wood, { map: T.plank }),
       plankDark: pmat(PAL.woodDark, { map: T.plank }),
       wood: pmat(PAL.wood), woodDark: pmat(PAL.woodDark), clay: pmat(PAL.clay), moss: pmat(PAL.moss),
@@ -283,8 +314,7 @@ export class Level {
       this.kit.add(G.sph(0.09), M.woodDark, { x: s * 1.2, y: Y + 2.45, z: gz });
     }
     this.box(0, Y + 2.35, gz, 2.9, 0.18, 0.34, M.plankDark, 'wood', { unit: 0.6 });
-    this.kit.add(G.gable(3.3, 1.0, 0.45), M.tile, { x: 0, y: Y + 2.44, z: gz });
-    this.kit.add(G.box(3.4, 0.06, 0.08), M.woodDark, { x: 0, y: Y + 2.9, z: gz });
+    this.roof(0, Y + 2.44, gz, 2.7, 0.34, 0.42, 0.32);
     this.collBox(0, Y + 2.6, gz, 3.3, 0.4, 1.0, 'wood');
     // ivy on the west post
     for (let i = 0; i < 14; i++) {
@@ -311,8 +341,8 @@ export class Level {
     // light shafts: the sun comes over the court through the gate
     const shaftMat = new THREE.MeshBasicMaterial({ color: '#FFE6B8', map: shaftTexture(), transparent: true, opacity: 0.14, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
     for (let i = 0; i < 5; i++) {
-      const s = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 5.5), shaftMat.clone());
-      s.position.set(-0.8 + i * 0.4, Y + 1.4, -8.6); s.rotation.set(-0.75, 0.15, 0);
+      const s = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 3.0), shaftMat.clone());
+      s.position.set(-0.8 + i * 0.4, Y + 1.05, -9.0); s.rotation.set(-0.75, 0.15, 0);
       this.group.add(s); this.sunShafts.push(s);
     }
     // flower pots along the parapet, a few tipped over
@@ -354,7 +384,7 @@ export class Level {
       o.rotation.set((Math.PI / 2) * 0.95, this.rand() * 6, 0); o.position.y += 0.12;
       this.kit.add(G.sph(0.12, 8, 6), pmat('#7A5E52'), { x: at.x + 0.25, y: at.y + 0.02, z: at.z }, [0, 0, 0], [1.4, 0.3, 1]);
     } else {
-      const soil = new THREE.Mesh(G.cyl(0.14, 0.14, 0.02, 10), pmat('#6E5448')); soil.position.y = 0.23; o.add(soil);
+      const soil = new THREE.Mesh(G.cyl(0.14, 0.14, 0.02, 10), pmat('#6E5448')); soil.position.y = 0.245; o.add(soil);
       const fm = pmat(flower);
       for (let i = 0; i < 5; i++) {
         const a = i * 1.3, r = 0.06;
@@ -384,17 +414,18 @@ export class Level {
     for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) this.kit.add(G.box(0.16, h, 0.16), M.woodDark, { x: cx + (x * w) / 2, y: Y + h / 2, z: cz + (z * d) / 2 });
     this.kit.add(G.box(w + 0.1, 0.14, 0.14), M.woodDark, { x: cx, y: Y + h - 0.05, z: cz - d / 2 - 0.02 });
     this.kit.add(G.box(0.14, 0.14, d + 0.1), M.woodDark, { x: cx - w / 2 - 0.02, y: Y + h - 0.05, z: cz });
-    this.kit.add(G.gable(w + 0.8, d + 0.9, 1.7), M.tile, { x: cx, y: Y + h, z: cz });
-    this.kit.add(G.box(w + 0.9, 0.1, 0.14), M.woodDark, { x: cx, y: Y + h + 1.7, z: cz });
+    this.roof(cx, Y + h, cz, w, d, 1.5, 0.45);
     this.collBox(cx, Y + h + 0.6, cz, w + 0.6, 1.2, d + 0.6, 'stone', 0, true);
     // chimney (main adds the smoke)
     this.box(7.4, Y + h + 1.3, 5.6, 0.55, 2.0, 0.55, M.stone, undefined, { unit: 1.2 });
     this.kit.add(G.box(0.68, 0.12, 0.68), M.stoneDark, { x: 7.4, y: Y + h + 2.32, z: 5.6 });
     // the door on the west face, with a cat flap and a brass knob
-    this.kit.add(G.box(0.08, 1.9, 0.95), M.plankDark, { x: cx - w / 2 - 0.02, y: Y + 0.95, z: cz });
-    this.kit.add(G.box(0.1, 0.08, 1.1), M.woodDark, { x: cx - w / 2 - 0.03, y: Y + 1.94, z: cz });
-    this.kit.add(G.box(0.1, 0.32, 0.3), M.woodDark, { x: cx - w / 2 - 0.06, y: Y + 0.2, z: cz + 0.15 });
-    this.kit.add(G.sph(0.04), pmat('#C9A35A'), { x: cx - w / 2 - 0.08, y: Y + 1.0, z: cz - 0.35 });
+    const dx = cx - w / 2;
+    this.kit.add(boxUV(G.box(0.1, 1.68, 0.95), 0.1, 1.68, 0.95, 1), M.plankDark, { x: dx - 0.03, y: Y + 0.37 + 0.84, z: cz });
+    this.kit.add(G.box(0.12, 0.09, 1.15), M.woodDark, { x: dx - 0.05, y: Y + 2.1, z: cz });
+    for (const s of [-1, 1]) this.kit.add(G.box(0.12, 1.74, 0.08), M.woodDark, { x: dx - 0.05, y: Y + 0.37 + 0.84, z: cz + s * 0.535 });
+    this.kit.add(G.box(0.04, 0.3, 0.28), M.woodDark, { x: dx - 0.1, y: Y + 0.58, z: cz + 0.15 });
+    this.kit.add(G.sph(0.04), pmat('#C9A35A'), { x: dx - 0.12, y: Y + 1.25, z: cz - 0.33 });
     // the stoop: a flat stone with a teapot and two cups
     this.box(cx - w / 2 - 0.5, Y + 0.08, cz, 0.9, 0.16, 1.3, M.stoneDark, 'stone', { unit: 0.8 });
     const tp = new THREE.Vector3(cx - w / 2 - 0.4, Y + 0.16, cz + 0.42);
@@ -422,7 +453,7 @@ export class Level {
       this.kit.addObject(o);
     }
     // the wind chime under the eave (animated)
-    const chime = new THREE.Group(); chime.position.set(cx - w / 2 - 0.35, Y + h + 0.05, cz - d / 2 - 0.35);
+    const chime = new THREE.Group(); chime.position.set(cx - w / 2 - 0.3, Y + h - 0.5, cz - d / 2 - 0.3);
     chime.add(new THREE.Mesh(G.cyl(0.1, 0.1, 0.02, 10), M.woodDark));
     const tubes: THREE.Mesh[] = [];
     for (let i = 0; i < 5; i++) {
@@ -558,6 +589,7 @@ export class Level {
   }
 
   private steppingStones(spacing: number) {
+    const placed: [number, number, number][] = [];
     for (const [ax, az, bx, bz] of this.paths) {
       const len = Math.hypot(bx - ax, bz - az);
       const n = Math.floor(len / spacing);
@@ -570,6 +602,9 @@ export class Level {
         if (y < -0.1) continue;
         if (this.rand() < 0.25) continue;
         const r = 0.17 + this.rand() * 0.09;
+        // stones that would overlap another (where paths meet) would flicker, so leave a gap instead
+        if (placed.some(([px, pz, pr]) => Math.hypot(px - x, pz - z) < (pr + r) * 1.3 + 0.06)) continue;
+        placed.push([x, z, r]);
         const g = new THREE.CylinderGeometry(r, r * 1.08, 0.07, 8);
         const pos = g.getAttribute('position') as THREE.BufferAttribute;
         const seed = this.rand() * 10;
@@ -656,11 +691,11 @@ export class Level {
     this.kit.add(boxUV(G.box(sw + 0.6, 0.16, sd + 0.6), sw + 0.6, 0.16, sd + 0.6, 1), M.tile, { x: sx, y: sh + 0.25, z: sz }, [0.12, 0, 0]);
     this.collBox(sx, sh + 0.2, sz, sw + 0.6, 0.3, sd + 0.6, 'wood', 0, true);
     this.seeds.push(new THREE.Vector3(sx - 0.2, sh + 0.75, sz - 0.1));
-    this.kit.add(G.box(0.9, 1.6, 0.06), M.plankDark, { x: sx + 0.6, y: 0.8, z: sz + sd / 2 + 0.03 });
+    this.kit.add(boxUV(G.box(0.9, 1.4, 0.08), 0.9, 1.4, 0.08, 1), M.plankDark, { x: sx + 0.6, y: 0.31 + 0.7, z: sz + sd / 2 + 0.04 });
     this.kit.add(G.box(0.6, 0.6, 0.06), M.glassDark, { x: sx - 0.7, y: 1.15, z: sz + sd / 2 + 0.02 });
     this.kit.add(G.box(0.32, 0.64, 0.05), M.plank, { x: sx - 1.15, y: 1.15, z: sz + sd / 2 + 0.15 }, [0, -0.9, 0]);
     for (let r = 0; r < 4; r++) for (let i = 0; i < 6 - r; i++) {
-      this.kit.add(G.cyl(0.09, 0.09, 0.9, 8), pmat(i % 2 ? '#B08A68' : '#9C7658'), { x: sx + sw / 2 + 0.25, y: 0.1 + r * 0.17, z: sz - 0.5 + i * 0.19 + r * 0.09 }, [Math.PI / 2, 0, 0]);
+      this.kit.add(G.cyl(0.085, 0.085, 0.42 + ((i * 7 + r * 3) % 5) * 0.02, 8), pmat(i % 2 ? '#B08A68' : '#9C7658'), { x: sx + sw / 2 + 0.27 + (((i * 3 + r * 5) % 4) - 1.5) * 0.015, y: 0.1 + r * 0.165, z: sz - 0.5 + i * 0.19 + r * 0.095 }, [i * 0.7, 0, Math.PI / 2]);
     }
     this.collBox(sx + sw / 2 + 0.25, 0.4, sz, 0.5, 0.8, 1.3, 'wood');
     this.kit.add(G.cyl(0.28, 0.32, 0.5, 12), pmat('#9C7658'), { x: sx + sw / 2 + 0.55, y: 0.25, z: sz + 1.1 });
@@ -763,10 +798,11 @@ export class Level {
     for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) this.kit.add(G.box(0.18, mh, 0.18), M.woodDark, { x: mx + (x * mw) / 2, y: mh / 2, z: mz + (z * md) / 2 });
     this.kit.add(G.box(0.16, 0.16, md + 0.1), M.woodDark, { x: mx - mw / 2 - 0.02, y: mh * 0.55, z: mz });
     for (let i = -2; i <= 2; i++) this.kit.add(G.box(0.12, mh * 0.45, 0.12), M.woodDark, { x: mx - mw / 2 - 0.02, y: mh * 0.78, z: mz + i * 1.0 }, [i * 0.25, 0, 0]);
-    const roof = G.gable(md + 0.9, mw + 1.0, 2.2); roof.rotateY(Math.PI / 2);
-    this.kit.add(roof, M.tile, { x: mx, y: mh, z: mz });
+    this.roof(mx, mh, mz, md, mw, 1.9, 0.5, Math.PI / 2);
     this.box(mx + 1.0, mh + 1.6, mz - 1.5, 0.6, 2.2, 0.6, M.stone, undefined, { unit: 1.2 });
-    this.kit.add(G.box(1.0, 1.9, 0.08), M.plankDark, { x: mx - 0.8, y: 0.95, z: mz + md / 2 + 0.03 });
+    this.kit.add(boxUV(G.box(1.0, 1.75, 0.1), 1.0, 1.75, 0.1, 1), M.plankDark, { x: mx - 0.8, y: 0.61 + 0.875, z: mz + md / 2 + 0.03 });
+    this.kit.add(G.box(1.2, 0.1, 0.14), M.woodDark, { x: mx - 0.8, y: 0.61 + 1.8, z: mz + md / 2 + 0.05 });
+    this.box(mx - 0.8, 0.3, mz + md / 2 + 0.35, 1.3, 0.6, 0.5, M.stoneDark, 'stone', { unit: 0.8 });
     this.kit.add(G.box(0.06, 0.7, 0.7), M.glassDark, { x: mx - mw / 2 - 0.02, y: 2.2, z: mz - 1.3 });
     this.kit.add(G.cyl(0.1, 0.1, 2.0, 8), M.woodDark, { x: 13.4, y: 0.55, z: -19.2 }, [0, 0, Math.PI / 2]);
     for (const s of [-1, 1]) this.kit.add(G.box(0.06, 2.6, 0.06), M.wood, { x: mx + mw / 2 + 0.25, y: 1.25, z: mz + 1.4 + s * 0.22 }, [0, 0, -0.18]);
@@ -1026,7 +1062,7 @@ function waterMaterial() {
         vec3 v = normalize(cameraPosition - vW);
         c = mix(c, uSky, pow(1.0 - v.y, 3.0) * 0.5);
         c = mix(c, uSparkle, streak * 0.45);
-        float foam = smoothstep(0.55, 0.0, edge) * n2(vW.xz * 4.0 + vec2(0.0, -uTime * 1.2));
+        float foam = (1.0 - smoothstep(0.0, 0.55, edge)) * n2(vW.xz * 4.0 + vec2(0.0, -uTime * 1.2));
         c = mix(c, uSparkle, foam * 0.7);
         float sp = step(0.94, n2(vW.xz * 7.0 + vec2(uTime * 0.3, -uTime * 1.5))) * step(0.5, n);
         c += uSparkle * sp * 0.6;

@@ -3,10 +3,11 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { T } from './tuning';
 import { Input } from './input';
 import { Sound } from './audio';
-import { Cat, PALETTE } from './cat';
+import { Spirit, PALETTE, DesignId } from './spirit';
 import { Level, glowTexture, heightAt } from './level';
 import { Player } from './player';
 import { FollowCamera } from './camera';
+import * as zcheck from './dev/zcheck';
 import { Particles } from './particles';
 import { Sky } from './world/sky';
 import { Ambient } from './world/ambient';
@@ -31,7 +32,7 @@ async function main() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   app.appendChild(renderer.domElement);
 
-  // --- light: late morning, sun high over the court so the cat and the trees get warm rims ---
+  // --- light: late morning, sun high over the court so Moth and the trees get warm rims ---
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(PAL.fog, 24, 120);
   const sunDir = new THREE.Vector3(0.62, 0.78, -0.45).normalize();
@@ -48,6 +49,7 @@ async function main() {
 
   // --- world ---
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+  if (params.has('zcheck')) (window as any).__zcheck = true;
   const level = new Level(world, phone);
   level.build();
   scene.add(level.group);
@@ -56,9 +58,10 @@ async function main() {
     () => [...level.pots.filter((p) => !p.broken).map((p) => p.body), ...level.crates.map((c) => c.body)]);
   player.facing = Math.PI;
 
-  const cat = new Cat();
-  scene.add(cat.root, cat.world);
-  cat.setLight(sunDir, new THREE.Color('#FFF1D2').multiplyScalar(2.2), new THREE.Color('#BFD9F2'));
+  const design = params.get('spirit');
+  const moth = new Spirit(design === 'wimble' || design === 'sorrel' ? design : 'kettle');
+  scene.add(moth.root, moth.world);
+  moth.setLight(sunDir, new THREE.Color('#FFF1D2').multiplyScalar(2.2), new THREE.Color('#BFD9F2'));
 
   const camera = new FollowCamera(innerWidth / innerHeight, world, player.collider, level.camBlock);
   camera.soft = level.foliage.canopies;
@@ -122,8 +125,8 @@ async function main() {
   const banner = document.getElementById('banner')!;
   const startEl = document.getElementById('start')!;
   document.getElementById('controls-hint')!.textContent = touch
-    ? 'Left thumb moves. Jump and Paw on the right. Drag to look.'
-    : 'Move WASD · Jump Space · Paw E · Drag to look. Gamepad works too.';
+    ? 'Left thumb moves. Jump and Bap on the right. Drag to look.'
+    : 'Move WASD · Jump Space · Bap E · Drag to look. Gamepad works too.';
   document.getElementById('touch')!.hidden = !touch;
   let started = false;
   let introT = -1;
@@ -299,20 +302,21 @@ async function main() {
       if (gatePush > 0.5) openGate();
     }
 
-    // cat
+    // Moth
     let df = player.facing - renderFacing; df = Math.atan2(Math.sin(df), Math.cos(df)); renderFacing += df * Math.min(1, dt * 20);
-    cat.root.position.copy(lerpPos);
-    cat.root.rotation.y = renderFacing;
-    cat.float = player.float01;
+    moth.root.position.copy(lerpPos);
+    moth.root.rotation.y = renderFacing;
+    moth.float = player.float01;
+    moth.carrying = carried !== null;
     const sp = Math.hypot(player.vel.x, player.vel.z) / T.runSpeed;
-    cat.update(dt, sp, player.grounded || player.floating, player.vel);
+    moth.update(dt, sp, player.grounded || player.floating, player.vel);
     {
       const hit = world.castRay(new RAPIER.Ray({ x: lerpPos.x, y: lerpPos.y + 0.3, z: lerpPos.z }, { x: 0, y: -1, z: 0 }), 6, true, undefined, undefined, player.collider);
       const gy = hit ? lerpPos.y + 0.3 - hit.timeOfImpact : lerpPos.y;
       const h = Math.max(0, lerpPos.y - gy);
-      cat.blob.position.set(lerpPos.x, gy + 0.015, lerpPos.z);
-      cat.blob.scale.setScalar(1 + h * 0.4);
-      (cat.blob.material as THREE.MeshBasicMaterial).opacity = 0.5 * Math.max(0, 1 - h / 3) * (1 - player.float01);
+      moth.blob.position.set(lerpPos.x, gy + 0.015, lerpPos.z);
+      moth.blob.scale.setScalar(1 + h * 0.4);
+      (moth.blob.material as THREE.MeshBasicMaterial).opacity = 0.5 * Math.max(0, 1 - h / 3) * (1 - player.float01);
     }
 
     // seeds
@@ -329,12 +333,15 @@ async function main() {
           particles.burst(s.pos.clone(), 10, 1.0, 0.08, amber, 0.9, 0.6);
         }
       } else if (s.state === 'carried') {
-        s.pos.lerp(cat.carryAnchor.position, Math.min(1, dt * 10));
-        s.glow.material.opacity = 0.85; s.glow.scale.setScalar(0.85);
+        s.pos.lerp(moth.carryAnchor.position, Math.min(1, dt * 10));
+        // hugged to Moth's belly: small enough to keep the face clear
+        s.glow.material.opacity = 0.45; s.glow.scale.setScalar(0.7);
+        s.mesh.scale.setScalar(THREE.MathUtils.damp(s.mesh.scale.x, 0.5, 8, dt));
         if (Math.random() < dt * 4) particles.emit(s.pos.clone(), new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.3, (Math.random() - 0.5) * 0.3), 0.04, 0.9, amber, 0.9, 0.5, 1.5);
         if (Math.hypot(player.pos.x - level.spirit.x, player.pos.z - level.spirit.z) < 2.5 && player.pos.y < 2.2) { s.state = 'delivering'; s.t = 0; carried = null; }
       } else if (s.state === 'delivering') {
         const k = Math.min(1, s.t / 0.9);
+        s.mesh.scale.setScalar(THREE.MathUtils.damp(s.mesh.scale.x, 1, 6, dt));
         const target = level.spirit.clone().add(new THREE.Vector3(0, 1.4, 0));
         s.pos.lerp(target, Math.min(1, dt * 5)); s.pos.y += Math.sin(k * Math.PI) * dt * 2;
         s.glow.scale.setScalar(0.8 + k * 0.8);
@@ -357,7 +364,7 @@ async function main() {
       if (want) {
         beaconAt.lerp(want, beaconAt.lengthSq() ? Math.min(1, dt * 3) : 1);
         beacon.position.set(beaconAt.x, beaconAt.y + 3.4, beaconAt.z);
-        // fade when close so it never sits in the cat's face
+        // fade when close so it never sits in Moth's face
         const d = Math.hypot(lerpPos.x - beaconAt.x, lerpPos.z - beaconAt.z);
         m.opacity = THREE.MathUtils.damp(m.opacity, 0.42 * THREE.MathUtils.smoothstep(d, 1.5, 5), 3, dt);
       } else m.opacity = THREE.MathUtils.damp(m.opacity, 0, 2, dt);
@@ -397,7 +404,7 @@ async function main() {
       bow.rotation.y += dt * 0.8; bow.position.y = level.keepsake.y + Math.sin(time * 2) * 0.05;
       if (player.pos.distanceTo(level.keepsake) < 0.8) {
         keepsakeFound = true; sound.keepsake();
-        cat.tailTip.add(bow); bow.position.set(0, 0.03, 0); bow.rotation.set(0, 0, 0); bow.scale.setScalar(0.5);
+        moth.wear(bow);
         showBanner('A ribbon for Moth.', 2200);
       }
     }
@@ -426,7 +433,8 @@ async function main() {
     ambient.update(dt, time, camera.cam, sunDir, lerpPos);
     updateCoach();
     camera.cam.updateMatrixWorld();
-    cat.renderSmoke(camera.cam, time);
+    moth.renderSmoke(camera.cam, time);
+    for (const x of lineup) { x.update(dt, 0, true, new THREE.Vector3()); x.renderSmoke(camera.cam, time); }
     renderer.render(scene, camera.cam);
     requestAnimationFrame(frame);
   }
@@ -440,6 +448,7 @@ async function main() {
 
   function placeSeed() {
     spiritLevel++;
+    moth.kick('happy');
     sound.deliver(spiritLevel - 1);
     updateHud();
     const lamp = level.lanterns[spiritLevel - 1];
@@ -471,18 +480,18 @@ async function main() {
 
   function handleEvent(e: (typeof player.events)[number]) {
     switch (e.type) {
-      case 'jump': sound.jump(); cat.kick('jump'); break;
-      case 'double': sound.doubleJump(); cat.kick('double'); break;
-      case 'land': sound.land(e.strength); cat.kick('land', e.strength); break;
+      case 'jump': sound.jump(); moth.kick('jump'); break;
+      case 'double': sound.doubleJump(); moth.kick('double'); break;
+      case 'land': sound.land(e.strength); moth.kick('land', e.strength); break;
       case 'step': sound.step(level.surfaces.get(player.groundHandle) ?? 'grass'); break;
       case 'bap': {
-        sound.bap(e.hit); cat.kick('bap');
+        sound.bap(e.hit); moth.kick('bap');
         const g = level.gate.centre;
         if (!level.gate.opening && Math.hypot(player.pos.x - g.x, player.pos.z - g.z) < 1.5 && Math.abs(player.pos.y - (g.y - 0.5)) < 1) openGate();
         break;
       }
       case 'float': sound.floatBack(); break;
-      case 'floatEnd': cat.kick('land', 0.3); break;
+      case 'floatEnd': moth.kick('land', 0.3); break;
     }
   }
 
@@ -492,9 +501,24 @@ async function main() {
     particles.setScale(innerHeight); ambient.setScale(innerHeight);
   });
 
+  // dev: stand other spirit designs next to Moth to compare them
+  const lineup: Spirit[] = [];
+  const showLineup = (ids: DesignId[], gap = 0.9) => {
+    ids.forEach((id, i) => {
+      const x = new Spirit(id);
+      x.setLight(sunDir, new THREE.Color('#FFF1D2').multiplyScalar(2.2), new THREE.Color('#BFD9F2'));
+      const side = new THREE.Vector3(Math.cos(player.facing), 0, -Math.sin(player.facing)).multiplyScalar((i === 0 ? -1 : 1) * gap);
+      x.root.position.copy(player.pos).add(side);
+      x.root.position.y = heightAt(x.root.position.x, x.root.position.z);
+      x.root.rotation.y = player.facing;
+      x.blob.position.copy(x.root.position).setY(x.root.position.y + 0.015);
+      scene.add(x.root, x.world); lineup.push(x);
+    });
+  };
+
   // test hooks for automated screenshots
   (window as any).__moth = {
-    player, camera, begin, seeds, level, breakPot, cat, renderer,
+    player, camera, begin, seeds, level, breakPot, moth, renderer, zcheck, showLineup,
     setYaw: (y: number) => (camera.yaw = y),
     skipIntro: () => (introT = INTRO),
     freeCam: (p: number[] | null, t?: number[], rel = false) => { camOverride = p ? { p: new THREE.Vector3(...p), t: new THREE.Vector3(...t!), rel } : null; },

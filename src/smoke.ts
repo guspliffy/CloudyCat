@@ -87,7 +87,7 @@ export class SmokeRenderer {
           float seed = vData.z * 37.0; float erode = vData.w;
           vec3 np = vec3(vUv * 1.7 + seed, uTime * 0.35 + seed * 0.5);
           float n = n3(np) * 0.62 + n3(np * 2.3 + 4.1) * 0.38;
-          float dens = smoothstep(1.0, 0.25 + 0.2 * erode, r);
+          float dens = 1.0 - smoothstep(0.25 + 0.2 * erode, 1.0, r);
           dens -= (1.0 - n) * (0.35 + 0.9 * erode) * (0.35 + 0.65 * r);
           dens = clamp(dens * (1.7 - 0.5 * erode), 0.0, 1.0);
           if (dens < 0.01) discard;

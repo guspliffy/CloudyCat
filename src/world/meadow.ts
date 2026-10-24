@@ -47,7 +47,7 @@ const WIND_VERTEX = (amp: number) => /* glsl */ `
     float hgt = clamp(position.y, 0.0, 1.0);
     vec2 wp = wpos0.xz;
     float gp = fract((dot(wp, uWindDir) - uTime * 4.0) / 18.0);
-    float gust = smoothstep(0.0, 0.25, gp) * smoothstep(0.55, 0.3, gp) * (0.25 + 0.75 * uGust);
+    float gust = smoothstep(0.0, 0.25, gp) * (1.0 - smoothstep(0.3, 0.55, gp)) * (0.25 + 0.75 * uGust);
     float sway = sin(uTime * 1.3 + wp.x * 0.6 + wp.y * 0.35) * 0.5 + sin(uTime * 2.1 + wp.x * 1.7 - wp.y * 1.1) * 0.25;
     vec2 bend = uWindDir * (gust * 0.55 + 0.08) + vec2(sway, sway * 0.6) * 0.12;
     vec2 d = wp - uPlayer.xz; float dist = length(d);

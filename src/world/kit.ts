@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import * as zcheck from '../dev/zcheck';
 
 // Static decor is built from many small primitives, then merged by material so the scene stays
 // a few hundred draw calls even with lots of detail. Animated parts stay separate meshes.
@@ -24,6 +25,7 @@ export class Kit {
     for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'uv') g.deleteAttribute(name);
     if (!g.getAttribute('uv')) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count * 2), 2));
     g.morphAttributes = {};
+    if ((globalThis as any).__zcheck) zcheck.record(g, mat);
     let list = this.parts.get(mat);
     if (!list) { list = []; this.parts.set(mat, list); }
     list.push(g);

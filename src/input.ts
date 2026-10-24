@@ -129,6 +129,6 @@ export class Input {
     const d = this.device;
     if (action === 'move') return d === 'keyboard' ? 'WASD' : d === 'gamepad' ? 'Stick' : '';
     if (action === 'jump') return d === 'keyboard' ? 'Space' : d === 'gamepad' ? 'A' : 'Jump';
-    return d === 'keyboard' ? 'E' : d === 'gamepad' ? 'X' : 'Paw';
+    return d === 'keyboard' ? 'E' : d === 'gamepad' ? 'X' : 'Bap';
   }
 }
