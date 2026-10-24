@@ -563,7 +563,9 @@ export class Garden {
         if (Math.abs(p.x - t.x) < CHIMNEY_OUT.half && Math.abs(p.z - t.z) < CHIMNEY_OUT.half && Math.abs(p.y - t.y) < 0.2) onTop = i;
       }
     }
-    if (onTop < 0 && player.grounded) this.armed = true;
+    // re-arm only once Kettle stands on the ground well away from both chimneys (never mid-flight, when
+    // the grounded flag is still the one from before the hop), so arriving can never send Kettle straight back
+    if (!this.armed && player.grounded && !player.floating && this.chimneyTops.every((t) => Math.hypot(p.x - t.x, p.z - t.z) > 0.9 || p.y < t.y - 0.5)) this.armed = true;
     if (onTop >= 0 && this.armed && free) {
       const to = this.chimneyTops[1 - onTop];
       this.armed = false; this.warpedOnce = true;

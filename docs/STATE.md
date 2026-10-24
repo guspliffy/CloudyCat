@@ -53,6 +53,7 @@ Updated 2026-10-24 (Spark Trail fusion: the spirit garden).
   - Room 1, the brass-plate court: a plate opens the lattice gate only while something holds it down. The big crate slides one flagstone per push (walk into it, or bap it), so it can hold the plate, and it is also the only step up to the ember on the stone stack. A crate pushed against the outer hedge puffs home after a moment, so it is never lost.
   - Room 2: hop onto the brick chimney and Kettle puffs into smoke and drifts over the wall into the walled bell yard (Spark Trail's portals). An ember waits there. Bapping the bell raises three stones out of the pond, up to the rock with the third ember, and opens the yard door.
   - Carry the three embers onto the dais at the north end: they fly into the spirit lantern, it lights, and the spirit in the court wakes with its lanterns, the waterwheel and the mill.
+- The map always marks the next step (the arch from outside, then the plate, the crate, the chimney, and so on); Jonny asked for it 2026-10-24.
 - Help adapts like Spark Trail's bands: per tool (plate, crate, chimney, bell, stones, step), the light beam points at the next step only after a wait in the garden, 12, 25 or 45 s depending on how quickly that tool went last time. Coach lines teach each tool once.
 - Progress saves in localStorage `moth-garden-v1`; `?fresh` resets it.
 

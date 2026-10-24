@@ -514,7 +514,8 @@ async function main() {
     // hint is due (how soon depends on how that tool went last time), and over the lantern once all embers are found
     {
       const want = !free || garden.lit ? null : !inGarden ? garden.archAt : hintAt();
-      goalAt = !garden.lit ? (!inGarden ? garden.archAt : garden.foundCount === 3 ? garden.lanternAt : want) : null;
+      // the map always shows the next step: the arch from outside, inside the garden the thing to do next
+      goalAt = garden.lit ? null : !inGarden ? garden.archAt : chainAt < chain.length ? chain[chainAt].at() : garden.lanternAt;
       const m = beacon.material as THREE.MeshBasicMaterial;
       if (want) {
         beaconAt.lerp(want, beaconAt.lengthSq() ? Math.min(1, dt * 3) : 1);
