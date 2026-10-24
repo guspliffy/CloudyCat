@@ -30,6 +30,10 @@ Updated 2026-10-24 (map, camera and quality pass after Jonny's third playtest).
 - Lag: resolution adapts to the frame rate (and notices a 30 Hz screen cap), no per-frame garbage in the loop, player, camera, spirit, smoke and particles, shadow map snapped to whole texels (no crawling shadow edges). `?fixedres` turns the adaptation off.
 - Bugs fixed: Moth could walk behind the start card; the start key jumped and cut the intro short; gamepad could not start; Ctrl+W walking closed the tab; coach hints could vanish or never show the gate hint; a seed could fall in the river and a crate could be lost (soft-locks); stuck keys after Cmd or a tab switch; sound kept playing in a hidden tab; banners hid each other early; right-stick look speed depended on frame rate; touch buttons missing on touch laptops; HUD, banner and coach clear of the map and notches.
 
+## Jonny's notes on the map build (2026-10-24 08:21), done
+- Camera a bit further back (camDistance 3.5) and calmer: the walking direction is smoothed, small steering is ignored, the swing eases in and out, height follows slowly so jumps do not bob the view, leaves ease the camera in instead of snapping.
+- Kettle got soft cat ears (they flick now and then, lie back at a run, perk up when happy) and a friendlier face: a small cat smile, bigger pupils, warmer eyes, fully open lids, face-coloured lids for the happy squint.
+
 ## Built: Mill Terrace, rebuilt
 - Art direction in `docs/ART-GUIDE.md` (Ghibli rules, palette, sun, the smoke cat spec, level plan, first 60 seconds, detail list).
 - Painted look (`src/world/ghibli.ts`): two-band anime shading with violet shade, shared wind with gusts. Sky with painted cumulus and far hills (`sky.ts`), blob trees with leaf fringe (`foliage.ts`), wind-blown grass Moth pushes aside (`meadow.ts`), pollen, butterflies, dandelion seeds, chimney smoke (`ambient.ts`).

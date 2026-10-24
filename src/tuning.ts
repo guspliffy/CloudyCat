@@ -34,11 +34,11 @@ export const T = {
   floatBackTime: 1.4,
 
   // camera
-  camDistance: 3.0,
+  camDistance: 3.5,
   camPitch: 0.34,
   camHeight: 0.5,
-  camLag: 6,
-  camAutoYaw: 2.4,
+  camLag: 5,
+  camAutoYaw: 1.5,
   camDragGrace: 0.35,
   camDragSpeed: 0.006,
 };

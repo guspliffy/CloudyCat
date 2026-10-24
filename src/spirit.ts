@@ -12,11 +12,24 @@ export const S = 1.3;
 
 export const PALETTE = {
   base: '#3D3860', shadow: '#24203A', rim: '#FFD9A0', glow: '#8E7FB8',
-  irisInner: '#FFD27A', irisOuter: '#E8862E', pupil: '#1A1226', blush: '#E79AA6', mouth: '#1A1226', ember: '#FFC46B',
+  irisInner: '#FFE3A0', irisOuter: '#F09A45', pupil: '#1A1226', blush: '#E79AA6', mouth: '#1A1226', ember: '#FFC46B',
 };
 
 type V3 = [number, number, number];
 const col = (h: string) => new THREE.Color(h);
+
+/** A soft gumdrop point for a cat ear: base at y = 0, rounded tip at y = 1, about 2 wide and 2 deep. */
+function earGeometry() {
+  const g = new THREE.SphereGeometry(1, 24, 16);
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const t = (p.getY(i) + 1) / 2;
+    const taper = 1 - 0.74 * Math.pow(t, 1.25);
+    p.setXYZ(i, p.getX(i) * taper, t, p.getZ(i) * taper);
+  }
+  g.computeVertexNormals();
+  return g;
+}
 
 function bodyMaterial() {
   return new THREE.ShaderMaterial({
@@ -85,7 +98,7 @@ function eyeMaterial() {
   return new THREE.ShaderMaterial({
     uniforms: {
       uInner: { value: col(PALETTE.irisInner) }, uOuter: { value: col(PALETTE.irisOuter) }, uPupil: { value: col(PALETTE.pupil) },
-      uLid: { value: 0 }, uLidCol: { value: col(PALETTE.shadow) }, uPupilW: { value: 0.52 }, uHappy: { value: 0 }, uLook: { value: new THREE.Vector2() },
+      uLid: { value: 0 }, uLidCol: { value: col('#4A4472') }, uPupilW: { value: 0.58 }, uHappy: { value: 0 }, uLook: { value: new THREE.Vector2() },
     },
     vertexShader: /* glsl */ `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: /* glsl */ `
@@ -98,12 +111,13 @@ function eyeMaterial() {
         vec3 c = mix(uInner, uOuter, smoothstep(0.0, 0.75, ir));
         c *= 1.0 - 0.4 * smoothstep(0.8, 1.0, ir);
         vec2 pu = uv - uLook * 0.12;
-        float pup = 1.0 - smoothstep(0.86, 1.0, length(pu / vec2(uPupilW, 0.58)));
+        float pup = 1.0 - smoothstep(0.86, 1.0, length(pu / vec2(uPupilW, 0.64)));
         c = mix(c, uPupil, pup);
         float cl = (1.0 - smoothstep(0.2, 0.34, length(uv - vec2(-0.38, 0.42)))) + (1.0 - smoothstep(0.08, 0.16, length(uv - vec2(0.42, -0.36))));
         c += vec3(1.0) * cl * 1.4;
         c *= 1.08;
-        float lidLine = mix(1.05, -1.25, uLid);
+        // fully open at rest (a lid across the top reads as a frown); closed lids are face coloured, not dark holes
+        float lidLine = mix(1.3, -1.25, uLid);
         float arc = 0.15 - 0.85 * uv.x * uv.x;
         float lineY = mix(lidLine, arc, uHappy);
         float covered = mix(step(lineY, uv.y), 1.0, uHappy);
@@ -125,6 +139,7 @@ interface Design {
   eye: { r: number; x: number; y: number }; // eye size and offset from the head centre
   blush: { r: number; x: number; y: number };
   mouthY: number;
+  ears?: { x: number; y: number; z: number; w: number; h: number; d: number; tilt: number }; // cat ears, head space
   mittens: V3[]; mittenR: number;
   feet: V3[];
   carry: V3; // where the ember is held
@@ -144,7 +159,8 @@ export const DESIGNS: Record<DesignId, Design> = {
     bodyC: [0, 0.165, 0], bodyR: [0.145, 0.15, 0.135],
     headC: [0, 0.35, 0.02], headR: [0.14, 0.136, 0.136],
     extra: [[[0.088, -0.038, 0.05], [0.05, 0.046, 0.045]], [[-0.088, -0.038, 0.05], [0.052, 0.048, 0.047]]],
-    eye: { r: 0.04, x: 0.054, y: 0.015 }, blush: { r: 0.024, x: 0.092, y: -0.035 }, mouthY: -0.028,
+    eye: { r: 0.043, x: 0.057, y: 0.008 }, blush: { r: 0.028, x: 0.092, y: -0.035 }, mouthY: -0.032,
+    ears: { x: 0.082, y: 0.094, z: -0.012, w: 0.09, h: 0.088, d: 0.038, tilt: 0.34 },
     mittens: [[0.155, 0.19, 0.05], [-0.155, 0.19, 0.05]], mittenR: 0.036,
     feet: [[0.065, 0.025, 0.03], [-0.065, 0.025, 0.03]],
     carry: [0, 0.2, 0.15], hover: 0,
@@ -226,7 +242,9 @@ export class Spirit {
   private mittenVel = [new THREE.Vector3(), new THREE.Vector3()];
   private crown = new THREE.Object3D();
   private carryLocal = new THREE.Object3D();
-  private mouthDash!: THREE.Mesh; private mouthSmile!: THREE.Mesh;
+  private mouthDash!: THREE.Object3D; private mouthSmile!: THREE.Mesh;
+  private ears: THREE.Object3D[] = [];
+  private earTwitch = -1; private earSide = 0; private nextTwitch = 3;
   private blushMat!: THREE.MeshBasicMaterial;
   private mat = bodyMaterial();
   private eyeMats: THREE.ShaderMaterial[] = [];
@@ -402,8 +420,14 @@ export class Spirit {
       this.head.add(m);
     }
     const mouthMat = new THREE.MeshBasicMaterial({ color: col(d.colors.mouth) });
-    this.mouthDash = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), mouthMat);
-    this.mouthDash.scale.set(0.013, 0.0045, 0.004);
+    // resting mouth: a small cat smile, two soft curves side by side
+    this.mouthDash = new THREE.Group();
+    const curve = new THREE.TorusGeometry(0.0085, 0.0024, 6, 14, Math.PI);
+    for (const side of [1, -1]) {
+      const c = new THREE.Mesh(curve, mouthMat);
+      c.rotation.z = Math.PI; c.position.x = side * 0.0082; c.userData.shadow = false;
+      this.mouthDash.add(c);
+    }
     this.mouthSmile = new THREE.Mesh(new THREE.TorusGeometry(0.015, 0.004, 6, 14, Math.PI), mouthMat);
     this.mouthSmile.rotation.z = Math.PI;
     const mouth = onHead(0, d.mouthY, -0.001).p;
@@ -415,6 +439,26 @@ export class Spirit {
     this.mouthSmile.position.y += 0.008;
     this.mouthSmile.visible = false;
     this.faceC.copy(onHead(0, 0, 0).p);
+
+    // cat ears: soft rounded points on top of the head, tipped outward, with a warm inner ear
+    if (d.ears) {
+      const e = d.ears, g = earGeometry();
+      const innerMat = new THREE.MeshBasicMaterial({ color: col('#B57F9F') });
+      for (const side of [1, -1]) {
+        const pivot = new THREE.Group();
+        pivot.position.set(side * e.x, e.y, e.z);
+        pivot.rotation.set(-0.12, 0, -side * e.tilt);
+        const outer = new THREE.Mesh(g, this.mat);
+        outer.scale.set(e.w / 2, e.h, e.d / 2);
+        const inner = new THREE.Mesh(g, innerMat);
+        inner.scale.set(e.w * 0.3, e.h * 0.66, e.d * 0.18);
+        inner.position.set(0, e.h * 0.2, e.d * 0.36);
+        inner.userData.shadow = false;
+        pivot.add(outer, inner);
+        this.head.add(pivot);
+        this.ears.push(pivot);
+      }
+    }
 
     // plume root; the chain itself lives in world space
     this.plumeRoot.position.set(...sub(d.plume.root, H));
@@ -603,8 +647,22 @@ export class Spirit {
     for (const m of this.eyeMats) {
       m.uniforms.uLid.value = Math.max(settle * 0.08, lid, sleepy * 0.85);
       m.uniforms.uHappy.value = THREE.MathUtils.damp(m.uniforms.uHappy.value, happy, 18, dt);
-      m.uniforms.uPupilW.value = 0.52 + this.thin * 0.08;
+      m.uniforms.uPupilW.value = 0.58 + this.thin * 0.08;
       m.uniforms.uLook.value.set(this.glance * 1.6, 0);
+    }
+    // ears: lie back a little at a run, perk up when happy, and flick now and then
+    if (this.ears.length) {
+      this.nextTwitch -= dt;
+      if (this.nextTwitch < 0) { this.earTwitch = 0; this.earSide = Math.random() < 0.5 ? 0 : 1; this.nextTwitch = 2.5 + Math.random() * 4; }
+      let flick = 0;
+      if (this.earTwitch >= 0) { this.earTwitch += dt; flick = Math.sin(Math.min(1, this.earTwitch / 0.22) * Math.PI); if (this.earTwitch > 0.22) this.earTwitch = -1; }
+      const tilt = this.d.ears!.tilt;
+      for (let i = 0; i < this.ears.length; i++) {
+        const side = i === 0 ? 1 : -1;
+        const e = this.ears[i];
+        e.rotation.x = THREE.MathUtils.damp(e.rotation.x, -0.12 - speed01 * 0.4 + (happy ? 0.12 : 0) - sleepy * 0.2, 8, dt);
+        e.rotation.z = -side * (tilt + (i === this.earSide ? flick * 0.28 : 0) - (happy ? 0.08 : 0) + sleepy * 0.25);
+      }
     }
     this.mouthSmile.visible = happy > 0 || this.carrying;
     this.mouthDash.visible = !this.mouthSmile.visible;

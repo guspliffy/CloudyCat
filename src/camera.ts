@@ -11,6 +11,9 @@ export class FollowCamera {
   private focus = new THREE.Vector3();
   private dist = T.camDistance;
   private sinceManual = 99;
+  private yawVel = 0; // the swing eases in and out instead of snapping
+  private heading = 0; // Moth's walking direction, smoothed so small steering does not shake the view
+  private walkFor = 0;
   private tmp = new THREE.Vector3();
   private dir = new THREE.Vector3();
   // the ray reads focus and dir directly, so it is made once
@@ -36,30 +39,43 @@ export class FollowCamera {
       this.sinceManual = 0;
     } else this.sinceManual += dt;
 
-    // whenever Moth walks, swing round behind it; a free look only holds while standing (or mid-drag)
+    // whenever Moth walks, swing round behind it; a free look only holds while standing (or mid-drag).
+    // Calm on purpose: the walking direction is smoothed, small turns inside a few degrees are ignored,
+    // the swing only starts after a moment of steady walking, and it eases in and out like a held camera.
     const hs = Math.hypot(vel.x, vel.z);
-    if (this.sinceManual > T.camDragGrace && hs > 0.5) {
+    const walking = this.sinceManual > T.camDragGrace && hs > 0.6;
+    this.walkFor = walking ? this.walkFor + dt : 0;
+    let wantVel = 0;
+    if (walking) {
       const behind = Math.atan2(-vel.x, -vel.z);
-      let d = behind - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+      if (this.walkFor <= dt) this.heading = behind;
+      let h = behind - this.heading; h = Math.atan2(Math.sin(h), Math.cos(h));
+      this.heading += h * (1 - Math.exp(-3 * dt));
+      let d = this.heading - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+      const dead = 0.12;
+      d = Math.sign(d) * Math.max(0, Math.abs(d) - dead);
       // walking straight at the camera turns it round more gently, so the view never whips
-      const k = Math.abs(d) > 2.4 ? 0.45 : 1;
-      const rate = T.camAutoYaw * THREE.MathUtils.clamp(hs / 3, 0.45, 1.2) * k;
-      this.yaw += d * (1 - Math.exp(-rate * dt));
-      this.pitch = THREE.MathUtils.damp(this.pitch, T.camPitch, 1.2, dt);
+      const k = Math.abs(d) > 2.3 ? 0.4 : 1;
+      const ramp = THREE.MathUtils.smoothstep(this.walkFor, 0.25, 1.0);
+      wantVel = d * T.camAutoYaw * THREE.MathUtils.clamp(hs / 3, 0.5, 1.1) * k * ramp;
+      this.pitch = THREE.MathUtils.damp(this.pitch, T.camPitch, 1.0, dt);
     }
+    this.yawVel = THREE.MathUtils.damp(this.yawVel, wantVel, walking ? 3 : 8, dt);
+    this.yaw += this.yawVel * dt;
 
     const goal = this.tmp.copy(target); goal.y += T.camHeight;
     this.focus.x = THREE.MathUtils.damp(this.focus.x, goal.x, T.camLag, dt);
     this.focus.z = THREE.MathUtils.damp(this.focus.z, goal.z, T.camLag, dt);
-    this.focus.y = THREE.MathUtils.damp(this.focus.y, goal.y, T.camLag * 0.6, dt);
+    // height follows slowly, so jumps and steps do not bob the whole view
+    this.focus.y = THREE.MathUtils.damp(this.focus.y, goal.y, T.camLag * 0.4, dt);
     this.place(dt);
   }
 
   private place(dt: number) {
     const dir = this.dir.set(Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch));
-    let want = T.camDistance;
+    let want = T.camDistance, hard = T.camDistance;
     const hit = this.world.castRay(this.ray, T.camDistance, true, undefined, undefined, this.exclude, undefined, this.blocking);
-    if (hit) want = Math.max(1.2, hit.timeOfImpact - 0.3);
+    if (hit) hard = want = Math.max(1.2, hit.timeOfImpact - 0.3);
     for (const { c, r } of this.soft) {
       // first entry of the ray into the sphere; skip when Moth itself stands inside it
       const ox = this.focus.x - c.x, oy = this.focus.y - c.y, oz = this.focus.z - c.z;
@@ -71,7 +87,9 @@ export class FollowCamera {
       const t = -b - Math.sqrt(disc);
       if (t < want) want = Math.max(1.2, t - 0.2);
     }
-    this.dist = want < this.dist ? want : THREE.MathUtils.damp(this.dist, want, 2.5, dt);
+    // walls pull the camera in at once (it must never see through them); leaves and coming back out ease
+    this.dist = THREE.MathUtils.damp(this.dist, want, want < this.dist ? 9 : 1.6, dt);
+    this.dist = Math.min(this.dist, hard);
     this.cam.position.copy(this.focus).addScaledVector(dir, this.dist);
     this.cam.lookAt(this.focus);
   }
