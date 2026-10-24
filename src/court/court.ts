@@ -1,13 +1,16 @@
 import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d-compat';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PAL, pmat, pmatVC } from '../world/ghibli';
 import { plankTex } from '../world/textures';
-import { move, initialState, snapshot, type Board, type Dir, type State, DIRS, DIR_LIST } from './rules';
+import { move, initialState, snapshot, type Board, type Dir, type State, DIRS } from './rules';
 
-// The puzzle court in 3D: a 6 by 6 flagstone yard where Spark Trail's rule holds. Kettle puffs into a cloud
-// and drifts until something stops it. The court owns the board, the undo stack and every piece on the
-// stones (obstacles, embers, the ember bowl, a crate, gates and the bell stone), animates the drift, and
-// reports what happened as events. main.ts decides what the camera, the HUD and the sound do with them.
+// The spark yard: a 6 by 6 flagstone yard where Spark Trail's rule holds for a little living spark.
+// Kettle walks around freely and baps the spark; it zips until something stops it. The yard owns the
+// board, the undo stack and every piece on the stones (obstacles, embers, the ember bowl, a crate, gates
+// and the bell stone), keeps solid colliders under them so Kettle can walk round and climb on them,
+// animates the zip, and reports what happened as events. main.ts decides what the camera, the HUD and
+// the sound do with them.
 
 /** Where the court lies in Mill Terrace (the east lawn of the lower court, below the terrace wall). */
 export const COURT = { cx: 6.05, cz: -13.7, tile: 0.9, n: 6, y: 0.16 };
@@ -38,10 +41,12 @@ export class Court {
   undoStack: State[] = [];
   moves = 0;
   events: CourtEvent[] = [];
-  /** Kettle while it is on the court: feet position, velocity and facing (yaw, 0 = +Z). */
-  kettle = new THREE.Vector3();
-  kettleVel = new THREE.Vector3();
-  kettleFacing = Math.PI;
+  /** The spark: where it sits on the stones, its velocity and facing (yaw, 0 = +Z). */
+  spark = new THREE.Vector3();
+  sparkVel = new THREE.Vector3();
+  sparkFacing = Math.PI;
+  /** where the spark looks while it waits (Kettle, when close) */
+  sparkLook: THREE.Vector3 | null = null;
   drifting = false;
   /** pieces are rising or sinking: no input until they settle */
   busy = 0;
@@ -55,13 +60,16 @@ export class Court {
   private crate!: Piece & { from: THREE.Vector3; to: THREE.Vector3; slide: number };
   private gates: (Piece & { open: number })[] = [];
   private plate!: Piece & { glow: THREE.Sprite; lit: number };
-  private markers: THREE.Mesh[] = [];
+  private marker!: THREE.Mesh;
+  private dots: THREE.Mesh[] = [];
   private markerFor = '';
+  private sparkObj!: { group: THREE.Group; body: THREE.Group; face: THREE.Group; eyes: THREE.Mesh[]; glow: THREE.Sprite; flame: THREE.Sprite; pop: number; gone: number };
+  private solids: { body: RAPIER.RigidBody; piece: Piece; h: number }[] = [];
   private anim: { pts: THREE.Vector3[]; dist: number[]; frames: ReturnType<typeof move> & object; t: number; T: number; ta: number; tb: number; v: number; next: number; crateFrom: number; crateAt: number } | null = null;
   private t = 0;
   private emberMat: THREE.MeshBasicMaterial;
 
-  constructor(glowTex: THREE.Texture) {
+  constructor(glowTex: THREE.Texture, world: RAPIER.World) {
     const mat = pmatVC();
     this.obstacleGeos = [boulder(), flowerPot(), roundBale(), sacks(), barrels(), topiary()];
     for (let i = 0; i < 14; i++) {
@@ -144,14 +152,51 @@ export class Court {
       g.visible = false; this.group.add(g);
       this.plate = { obj: g, base: new THREE.Vector3(), lift: 0, want: 0, delay: 0, glow, lit: 0 };
     }
-    // drift preview: four soft rings where each way would stop
-    const ringTex = ringTexture();
-    for (let i = 0; i < 4; i++) {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), new THREE.MeshBasicMaterial({ map: ringTex, transparent: true, depthWrite: false, opacity: 0, fog: false }));
-      m.rotation.x = -Math.PI / 2; m.renderOrder = 2; m.visible = false;
-      this.group.add(m); this.markers.push(m);
+    // aim hint: a soft ring where the spark would stop if bapped now, and small dots along the way
+    this.marker = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), new THREE.MeshBasicMaterial({ map: ringTexture(), transparent: true, depthWrite: false, opacity: 0, fog: false }));
+    this.marker.rotation.x = -Math.PI / 2; this.marker.renderOrder = 2; this.marker.visible = false; this.group.add(this.marker);
+    const dotGeo = new THREE.CircleGeometry(0.05, 12);
+    for (let i = 0; i < 8; i++) {
+      const d = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color: '#FFF6E0', transparent: true, depthWrite: false, opacity: 0, fog: false }));
+      d.rotation.x = -Math.PI / 2; d.renderOrder = 2; d.visible = false; this.group.add(d); this.dots.push(d);
     }
+
+    // the spark: a small bright ember with big dark eyes and a flame that leans as it zips
+    {
+      const group = new THREE.Group(), body = new THREE.Group(), face = new THREE.Group();
+      const core = new THREE.Mesh(new THREE.SphereGeometry(0.15, 20, 14), new THREE.MeshBasicMaterial({ color: '#FFF1C9' }));
+      body.add(core);
+      const eyeMat = new THREE.MeshBasicMaterial({ color: '#3B2B3F' }), shine = new THREE.MeshBasicMaterial({ color: '#FFFFFF' });
+      const eyes: THREE.Mesh[] = [];
+      for (const x of [-0.055, 0.055]) {
+        const e = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), eyeMat); e.scale.set(0.85, 1.15, 0.5); e.position.set(x, 0.02, 0.138);
+        const h = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 4), shine); h.position.set(0.01, 0.014, 0.012); e.add(h);
+        face.add(e); eyes.push(e);
+      }
+      const blush = new THREE.MeshBasicMaterial({ color: '#FFB08A', transparent: true, opacity: 0.8 });
+      for (const x of [-0.095, 0.095]) { const b = new THREE.Mesh(new THREE.CircleGeometry(0.022, 10), blush); b.position.set(x, -0.03, 0.128); b.rotation.y = x * 4; face.add(b); }
+      body.add(face);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: '#FFC46B', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: 0.9 }));
+      glow.scale.setScalar(1.05);
+      const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: '#FFE2A8', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: 0.85 }));
+      flame.scale.set(0.3, 0.5, 1); flame.position.y = 0.2;
+      group.add(body, glow, flame); group.visible = false; this.group.add(group);
+      this.sparkObj = { group, body, face, eyes, glow, flame, pop: 0, gone: 0 };
+    }
+
+    // solid pieces: Kettle walks round them and can climb on top (a kinematic box under each one)
+    const solid = (piece: Piece, hx: number, h: number, hz: number) => {
+      const body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, -20, 0));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(hx, h / 2, hz).setFriction(0.8), body);
+      this.solids.push({ body, piece, h });
+    };
+    for (const o of this.obstacles) solid(o, 0.36, 0.62, 0.36);
+    solid(this.crate, 0.34, 0.68, 0.34);
+    for (const g of this.gates) solid(g, 0.42, 0.55, 0.42);
   }
+
+  /** Height of each obstacle kind's top, so Kettle stands on the leaves, not in the air above them. */
+  private static TOPS = [0.6, 0.78, 0.6, 0.62, 0.66, 0.74];
 
   cellPos(r: number, c: number, out = new THREE.Vector3()) {
     return out.set(COURT.cx + (c - (COURT.n - 1) / 2) * COURT.tile, COURT.y, COURT.cz + (r - (COURT.n - 1) / 2) * COURT.tile);
@@ -167,7 +212,13 @@ export class Court {
   get hasCrate() { return !!this.board && this.state!.crate >= 0; }
   get hasGate() { return !!this.board?.gates?.length; }
   get startPos() { return this.cellPos(this.board!.start[0], this.board!.start[1]); }
-  get kettleCell() { return this.state ? this.cellPos(this.state.pos[0], this.state.pos[1]) : this.startPos; }
+  get sparkCell() { return this.state ? this.cellPos(this.state.pos[0], this.state.pos[1]) : this.startPos; }
+  /** The cells obstacles, the crate and closed gates stand on, to lift Kettle out of a rising piece. */
+  solidTops(out: { p: THREE.Vector3; top: number }[]) {
+    out.length = 0;
+    for (const s of this.solids) if (s.piece.want > 0) out.push({ p: s.piece.base, top: COURT.y + s.h });
+    return out;
+  }
 
   /** Raise a board. Old pieces sink first; new ones rise in a ripple from the start stone. */
   load(board: Board, state: State | null = null, instant = false) {
@@ -175,6 +226,7 @@ export class Court {
     this.board = board;
     this.state = state ? snapshot(state) : initialState(board);
     this.undoStack = []; this.moves = 0; this.anim = null; this.drifting = false; this.markerFor = '';
+    this.sparkObj.gone = 0;
     for (const p of this.allPieces()) p.want = 0;
     const raise = () => this.place(instant);
     if (hadBoard && !instant) { this.busy = 0.55; setTimeout(raise, 520); }
@@ -214,7 +266,9 @@ export class Court {
     this.applyMask(true);
     this.busy = instant ? 0 : 1.1;
     this.placed++;
-    this.kettle.copy(this.kettleCell);
+    this.spark.copy(this.sparkCell);
+    this.sparkObj.pop = instant ? 1 : -0.6; this.sparkObj.group.visible = true;
+    this.obstacles.forEach((o) => { const sd = this.solids.find((x) => x.piece === o)!; sd.h = Court.TOPS[o.kind]; });
   }
 
   /** Embers already collected sit in the bowl. */
@@ -234,7 +288,7 @@ export class Court {
     this.undoStack.push(snapshot(this.state));
     this.moves++;
     // the drift follows the frames as a polyline (currents can turn it); a passage is a jump with no length
-    const pts = [this.kettleCell.clone()], dist = [0];
+    const pts = [this.sparkCell.clone()], dist = [0];
     for (const f of m.frames) {
       const p = this.cellPos(f.pos[0], f.pos[1]);
       dist.push(dist[dist.length - 1] + (f.teleport ? 0 : p.distanceTo(pts[pts.length - 1])));
@@ -269,7 +323,7 @@ export class Court {
   }
   private snapPieces() {
     const s = this.state!;
-    this.kettle.copy(this.kettleCell); this.kettleVel.set(0, 0, 0);
+    this.spark.copy(this.sparkCell); this.sparkVel.set(0, 0, 0); this.sparkObj.gone = 0;
     if (s.crate >= 0) { this.cellOf(s.crate, this.crate.base); this.crate.slide = 1; }
     this.gates.forEach((g) => (g.open = s.opened ? 1 : 0));
     this.plate.lit = s.opened ? 1 : 0;
@@ -285,9 +339,12 @@ export class Court {
   private releaseT = -1; private releaseTo = new THREE.Vector3(); private releaseDone: (() => void) | null = null;
 
   /** Sink everything (the court rests between visits once all rounds are done). */
-  rest() { for (const p of this.allPieces()) p.want = 0; this.bowl.group.visible = false; this.board = null; this.state = null; this.markerFor = ''; }
+  rest() { for (const p of this.allPieces()) p.want = 0; this.bowl.group.visible = false; this.board = null; this.state = null; this.markerFor = ''; this.sparkObj.gone = Math.max(this.sparkObj.gone, 0.01); }
 
-  update(dt: number, showPreview: boolean) {
+  /** The spark sinks into the bowl's flame once it has won. */
+  settle() { this.sparkObj.gone = 0.01; }
+
+  update(dt: number, preview: Dir | null) {
     this.t += dt;
     this.events.length = 0;
     if (this.busy > 0) this.busy = Math.max(0, this.busy - dt);
@@ -365,7 +422,48 @@ export class Court {
       if (!this.board && this.bowl.ready < 0.01) this.bowl.group.visible = false;
     }
 
-    this.updateMarkers(dt, showPreview && !this.drifting && this.busy === 0);
+    this.updateSpark(dt);
+    this.updateSolids();
+    this.updateMarkers(dt, !this.drifting && this.busy === 0 && this.sparkObj.gone === 0 ? preview : null);
+  }
+
+  private updateSpark(dt: number) {
+    const o = this.sparkObj;
+    if (!o.group.visible) return;
+    o.pop = Math.min(1, o.pop + dt * 2.4);
+    if (o.gone > 0) o.gone = Math.min(1, o.gone + dt * 1.6);
+    const k = Math.max(0, o.pop), pop = k < 1 ? 1 + Math.sin(k * Math.PI) * 0.25 : 1;
+    const size = 1.15 * ease(k) * pop * (1 - ease(o.gone));
+    const sp = this.sparkVel.length();
+    // a happy little hop while it waits; long and low while it zips
+    const hop = this.drifting ? 0 : Math.abs(Math.sin(this.t * 3.2)) * 0.06;
+    o.group.position.set(this.spark.x, this.spark.y + 0.28 + hop - o.gone * 0.2, this.spark.z);
+    const stretch = Math.min(0.45, sp * 0.07);
+    o.body.scale.set(size * (1 - stretch * 0.4), size * (1 - stretch * 0.25 + (hop > 0.05 ? 0.04 : 0)), size * (1 + stretch));
+    o.glow.scale.setScalar(1.05 * size + Math.sin(this.t * 7) * 0.03);
+    o.glow.material.opacity = 0.85 * size;
+    o.flame.scale.set(0.3 * size, (0.5 + Math.sin(this.t * 11) * 0.06) * size, 1);
+    o.flame.position.set(-this.sparkVel.x * 0.025, 0.2 * size, -this.sparkVel.z * 0.025);
+    o.flame.material.opacity = 0.85 * size;
+    // face: along the zip, or toward Kettle while it waits
+    let yaw = this.sparkFacing;
+    if (!this.drifting && this.sparkLook) yaw = Math.atan2(this.sparkLook.x - this.spark.x, this.sparkLook.z - this.spark.z);
+    let d = yaw - o.body.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
+    o.body.rotation.y += d * Math.min(1, dt * 10);
+    // a blink now and then
+    const blink = (this.t % 3.7) < 0.12 ? 0.15 : 1;
+    for (const e of o.eyes) e.scale.y = 1.15 * blink;
+    if (o.gone >= 1) o.group.visible = false;
+  }
+
+  /** Each solid follows its piece; a sunk or hidden piece puts its box far below the ground. */
+  private updateSolids() {
+    for (const s of this.solids) {
+      const o = s.piece.obj;
+      const up = o.visible && s.piece.lift > 0.5 && !(this.gates.includes(s.piece as Piece & { open: number }) && (s.piece as Piece & { open: number }).open > 0.5);
+      const y = up ? o.position.y + s.h / 2 : -20;
+      s.body.setNextKinematicTranslation({ x: o.position.x, y, z: o.position.z });
+    }
   }
 
   private gateOpening = false;
@@ -376,10 +474,10 @@ export class Court {
       // a blocked push: a small lean toward the way, then back
       if (this.nudgeT < 1) {
         this.nudgeT = Math.min(1, this.nudgeT + dt * 5);
-        this.kettle.copy(this.kettleCell).addScaledVector(this.nudgeDir, Math.sin(this.nudgeT * Math.PI) * 0.08);
-        this.kettleFacing = Math.atan2(this.nudgeDir.x, this.nudgeDir.z);
+        this.spark.copy(this.sparkCell).addScaledVector(this.nudgeDir, Math.sin(this.nudgeT * Math.PI) * 0.08);
+        this.sparkFacing = Math.atan2(this.nudgeDir.x, this.nudgeDir.z);
       }
-      this.kettleVel.set(0, 0, 0);
+      this.sparkVel.set(0, 0, 0);
       return;
     }
     a.t = Math.min(a.T, a.t + dt);
@@ -395,13 +493,13 @@ export class Court {
     while (seg < a.dist.length - 1 && a.dist[seg] < s) seg++;
     const s0 = a.dist[seg - 1], s1 = a.dist[seg];
     const k = s1 > s0 ? (s - s0) / (s1 - s0) : 1;
-    const prev = _w.copy(this.kettle);
-    this.kettle.lerpVectors(a.pts[seg - 1], a.pts[seg], k);
-    this.kettleVel.copy(this.kettle).sub(prev).divideScalar(Math.max(dt, 1e-4));
+    const prev = _w.copy(this.spark);
+    this.spark.lerpVectors(a.pts[seg - 1], a.pts[seg], k);
+    this.sparkVel.copy(this.spark).sub(prev).divideScalar(Math.max(dt, 1e-4));
     const d = _v.subVectors(a.pts[seg], a.pts[seg - 1]);
-    if (d.lengthSq() > 1e-4) this.kettleFacing = Math.atan2(d.x, d.z);
+    if (d.lengthSq() > 1e-4) this.sparkFacing = Math.atan2(d.x, d.z);
 
-    // what Kettle passes on the way: embers and the bell stone count once Kettle is over their stone
+    // what the spark passes on the way: embers and the bell stone count once it is over their stone
     while (a.next < a.frames.frames.length && s >= a.dist[a.next + 1] - COURT.tile * 0.35) {
       const f = a.frames.frames[a.next];
       const before = this.state!;
@@ -414,7 +512,7 @@ export class Court {
       if (f.opened && !before.opened) { this.plate.lit = 1; this.gateOpening = true; this.events.push({ type: 'switch' }); }
       a.next++;
     }
-    // a pushed crate moves on contact and arrives with Kettle
+    // a pushed crate moves on contact and arrives with the spark
     if (a.crateAt >= 0) {
       const lastStart = a.dist[a.dist.length - 2];
       this.crate.slide = THREE.MathUtils.clamp((s - lastStart - 0.25) / (COURT.tile - 0.25), 0, 1);
@@ -425,28 +523,32 @@ export class Court {
       const m = a.frames;
       this.state = { pos: [m.pos[0], m.pos[1]], mask: m.mask, opened: m.opened, crate: m.crate, raised: m.raised };
       this.anim = null; this.drifting = false; this.pushed = false;
-      this.kettle.copy(this.kettleCell); this.kettleVel.set(0, 0, 0);
+      this.spark.copy(this.sparkCell); this.sparkVel.set(0, 0, 0);
       this.events.push({ type: 'stop', strength: Math.min(1, L / 4) });
       if (m.won) this.events.push({ type: 'won' });
     }
   }
   private pushed = false;
 
-  private updateMarkers(dt: number, show: boolean) {
-    const key = show && this.state ? `${this.state.pos},${this.state.mask},${this.state.crate},${this.state.opened}` : '';
+  private updateMarkers(dt: number, dir: Dir | null) {
+    const key = dir && this.state ? `${dir},${this.state.pos},${this.state.mask},${this.state.crate},${this.state.opened}` : '';
     if (key !== this.markerFor) {
       this.markerFor = key;
-      DIR_LIST.forEach((dir, i) => {
-        const m = this.markers[i];
-        const mv = key ? move(this.board!, this.state!, dir) : null;
-        if (!mv) { m.userData.want = 0; return; }
-        this.cellPos(mv.pos[0], mv.pos[1], m.position); m.position.y += 0.012 + i * 0.001;
-        m.userData.want = 1; m.visible = true;
+      const mv = key ? move(this.board!, this.state!, dir!) : null;
+      this.marker.userData.want = mv ? 1 : 0;
+      if (mv) { this.cellPos(mv.pos[0], mv.pos[1], this.marker.position); this.marker.position.y += 0.012; this.marker.visible = true; }
+      // dots on the stones the spark crosses before it stops
+      const path = mv ? mv.frames.slice(0, -1).filter((f) => !f.teleport) : [];
+      this.dots.forEach((d, i) => {
+        const f = path[i];
+        d.userData.want = f ? 1 : 0;
+        if (f) { this.cellPos(f.pos[0], f.pos[1], d.position); d.position.y += 0.014; d.visible = true; }
       });
     }
-    for (const m of this.markers) {
+    const pulse = 0.42 + Math.sin(this.t * 2.2) * 0.06;
+    for (const m of [this.marker, ...this.dots]) {
       const mat = m.material as THREE.MeshBasicMaterial;
-      mat.opacity = THREE.MathUtils.damp(mat.opacity, (m.userData.want ?? 0) * (0.42 + Math.sin(this.t * 2.2) * 0.06), 8, dt);
+      mat.opacity = THREE.MathUtils.damp(mat.opacity, (m.userData.want ?? 0) * (m === this.marker ? pulse : 0.5), 10, dt);
       if (mat.opacity < 0.01 && !m.userData.want) m.visible = false;
     }
   }

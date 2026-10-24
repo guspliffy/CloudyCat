@@ -289,7 +289,7 @@ export class Level {
     for (const [x0, x1] of [[RAMP.x1, -1.15], [1.15, TERRACE.x1]]) {
       const w = x1 - x0, cx = (x0 + x1) / 2;
       this.box(cx, Y / 2, -9.75, w, Y, 0.5, M.stone, 'stone', { block: true, unit: 1.2 });
-      this.box(cx, Y + 0.25, -9.65, w, 0.5, 0.4, M.stone, 'stone', { unit: 1.2 });
+      this.box(cx, Y + 0.25, -9.65, w, 0.5, 0.4, M.stone, 'stone', { block: true, unit: 1.2 });
       this.box(cx, Y + 0.53, -9.65, w + 0.06, 0.08, 0.48, M.stoneDark, undefined, { unit: 1.2 });
       this.clear(x0 - 0.2, -10.2, x1 + 0.2, -9.3);
     }
@@ -871,14 +871,6 @@ export class Level {
     const basket = new THREE.Vector3(11.3, 0.95, bz + 0.72);
     this.kit.add(G.sph(0.16, 10, 6), M.straw, { x: basket.x, y: basket.y, z: basket.z }, [0, 0, 0], [1, 0.7, 1]);
     for (let i = 0; i < 6; i++) this.kit.add(G.ico(0.05, 0), pmat(i % 2 ? PAL.poppy : PAL.daisy), { x: basket.x + Math.cos(i) * 0.12, y: basket.y + 0.1, z: basket.z + Math.sin(i) * 0.12 });
-    // a stone lantern on the river path
-    const sl = new THREE.Vector3(COURT_RECT.x0 - 0.45, 0, COURT_RECT.z1 - 0.35);
-    this.kit.add(G.cyl(0.3, 0.32, 0.2, 6), M.stoneDark, { x: sl.x, y: 0.1, z: sl.z });
-    this.kit.add(G.cyl(0.1, 0.12, 0.7, 6), M.stoneDark, { x: sl.x, y: 0.55, z: sl.z });
-    this.kit.add(G.box(0.36, 0.3, 0.36), M.stoneDark, { x: sl.x, y: 1.05, z: sl.z });
-    this.kit.add(G.cone(0.42, 0.3, 6), M.stoneDark, { x: sl.x, y: 1.35, z: sl.z });
-    this.kit.add(G.ico(0.1, 1), M.moss, { x: sl.x + 0.1, y: 1.45, z: sl.z }, [0, 0, 0], [2, 0.6, 2]);
-    this.collCyl(sl.x, 0.75, sl.z, 0.3, 1.5, 'stone');
     // fisherman's stool and rod on the bank
     this.kit.add(G.cyl(0.18, 0.18, 0.05, 10), M.wood, { x: 8.6, y: 0.38, z: -22.3 });
     for (let i = 0; i < 3; i++) this.kit.add(G.cyl(0.02, 0.02, 0.4, 4), M.woodDark, { x: 8.6 + Math.cos(i * 2.1) * 0.12, y: 0.18, z: -22.3 + Math.sin(i * 2.1) * 0.12 });

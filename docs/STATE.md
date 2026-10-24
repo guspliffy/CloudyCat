@@ -1,6 +1,6 @@
 # State
 
-Updated 2026-10-24 (phase 1 of the Spark Trail merge: puzzle courts in Mill Terrace).
+Updated 2026-10-24 (Spark Trail fusion: herd the sparks).
 
 ## Decided
 - Game: **Moth** (repo CloudyCat), calm 3D platform-puzzler, concept in `docs/concept.html`.
@@ -46,14 +46,15 @@ Updated 2026-10-24 (phase 1 of the Spark Trail merge: puzzle courts in Mill Terr
 - Goal: a 6 s intro shot of the sleeping spirit with "Bring three embers to the sleeping spirit.", lantern dots in the corner, a light beam over the next thing to do, the spirit breathes an amber ring toward the next seed.
 - Camera pulls in front of walls and now also in front of tree canopies.
 
-## Spark Trail merge, phase 1 (2026-10-24)
+## Herd the sparks: Spark Trail fused into Moth (2026-10-24)
 - Jonny asked to combine his game Spark Trail with Moth: Moth's free 3D movement and look plus Spark Trail's tasks, adaptive difficulty and worlds. Plan doc: https://claude.ai/artifact/BJt2VKpJGLeGFscsTyTtBz. Jonny: "go for it", he judges after playing a few rounds.
-- The old loop (carry three embers to the spirit) is gone. Now a **puzzle court** of 6x6 flagstones lies on the east lawn of the court. Step on and Kettle puffs into a cloud; each push drifts it until something stops it (Spark Trail's rule). Gather three embers, then stop in the ember bowl.
+- First try (puzzle court: step on and Kettle itself drifts on a board, fixed camera) was judged "just Sparky in Moth's world". Jonny wants a real fusion that keeps free third-person play. He picked **herd the sparks** (2026-10-24 11:34).
+- Now: Kettle always walks free. In the spark yard on the east lawn a little living spark (eyes, flame) sits on 6x6 flagstones. Bap it and it zips away from Kettle along the stones until something stops it (Spark Trail's rule). Walk round it (or climb on a piece) to send it another way. It gathers three embers on its way, then must stop in the ember bowl. A ring and dots on the stones show where it will stop. Obstacles, the crate and closed pens are solid, so Kettle walks round and climbs on them. The camera rises a little in the yard.
 - `src/court/rules.ts` ports Spark Trail's rules engine (walls, keys, crate, gates and switch, portals, risers, pads, currents) with a BFS solver. `boards.ts` holds 6 stops from Jonny's own catalogs (intro 0, 2, 4 and mill 500, 501, 503), each with Gentle, Standard and Challenging variants, all checked by the solver. `adapt.ts` ports adaptation.mjs (a skill band per tool family, first finishes only, intro stops capped at Standard, comfort stops one step easier). `court.ts` is the 3D court: obstacles, embers, bowl, crate, picket-pen gates and the brass bell stone, drift animation and preview rings.
-- Each first win sends the embers to the spirit and brings back one piece of the terrace, with a short camera shot: the three lanterns, the waterwheel, the mill windows, then the spirit wakes. A result card shows 1 to 3 flames (par, par+2), "Try for three" and Next.
-- Controls on the court: arrows/WASD/stick or a swipe pick a way; Undo (Z, Backspace, Bap), Restart (R, pad Y), Step off (Esc, Space, pad Start). A quick tap between frames still counts.
+- Each first win sends the embers to the spirit and brings back one piece of the terrace, with a short camera shot: the three lanterns, the waterwheel, the mill windows, then the spirit wakes. A line says how many baps it took against the shortest; the next puzzle rises by itself. Once the spirit is awake, the yard offers puzzles below three flames again when Kettle comes back.
+- Controls in the yard: Bap (E, pad X, touch Bap) sends the spark; Undo (Z, Backspace, pad LB) and Start over (R, pad Y), also as two buttons.
 - Progress saves in localStorage `moth-court-v1`. `?fresh` resets it, `?round=N` starts at round N.
 
 ## Next
-- Jonny plays the six court rounds and says whether the drift puzzles fit Moth.
-- Then phase 2: The Little Mill as a full world (6 stops, more tools: chimneys for portals, breeze streams, lily pads, rising stones), and the moving track of adaptive difficulty.
+- Jonny plays the six spark puzzles.
+- Then: sparks in more places of the open world (not only one yard), more tools (chimneys for portals, breeze streams, lily pads, rising stones), and the moving track of adaptive difficulty.

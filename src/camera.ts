@@ -8,6 +8,8 @@ export class FollowCamera {
   cam: THREE.PerspectiveCamera;
   yaw = 0;
   pitch = T.camPitch;
+  /** 0 to 1: a little higher and further back, to look over a puzzle yard */
+  overview = 0;
   private focus = new THREE.Vector3();
   private dist = T.camDistance;
   private sinceManual = 99;
@@ -45,8 +47,8 @@ export class FollowCamera {
       // turning right round toward the camera swings it a little slower, so the view never whips
       const k = Math.abs(d) > 2.3 ? 0.5 : 1;
       this.yaw += d * (1 - Math.exp(-T.camAutoYaw * walk * k * dt));
-      this.pitch = THREE.MathUtils.damp(this.pitch, T.camPitch, 1.5 * walk, dt);
-    }
+      this.pitch = THREE.MathUtils.damp(this.pitch, T.camPitch + this.overview * 0.3, 1.5 * walk, dt);
+    } else if (this.overview > 0.01 && this.sinceManual > 2) this.pitch = THREE.MathUtils.damp(this.pitch, T.camPitch + this.overview * 0.3, 1.2, dt);
 
     const goal = this.tmp.copy(target); goal.y += T.camHeight;
     this.focus.x = THREE.MathUtils.damp(this.focus.x, goal.x, T.camLag, dt);
@@ -58,8 +60,9 @@ export class FollowCamera {
 
   private place(dt: number) {
     const dir = this.dir.set(Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch));
-    let want = T.camDistance, hard = T.camDistance;
-    const hit = this.world.castRay(this.ray, T.camDistance, true, undefined, undefined, this.exclude, undefined, this.blocking);
+    const far = T.camDistance + this.overview * 1.1;
+    let want = far, hard = far;
+    const hit = this.world.castRay(this.ray, far, true, undefined, undefined, this.exclude, undefined, this.blocking);
     if (hit) hard = want = Math.max(1.2, hit.timeOfImpact - 0.3);
     for (const { c, r } of this.soft) {
       // first entry of the ray into the sphere; skip when Moth itself stands inside it

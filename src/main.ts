@@ -5,7 +5,7 @@ import { Input } from './input';
 import { Sound } from './audio';
 import { Spirit, PALETTE, DesignId } from './spirit';
 import { Level, glowTexture, heightAt } from './level';
-import { Player, HALF, RADIUS } from './player';
+import { Player } from './player';
 import { FollowCamera } from './camera';
 import { Minimap } from './minimap';
 import * as zcheck from './dev/zcheck';
@@ -13,7 +13,7 @@ import { Particles } from './particles';
 import { Sky } from './world/sky';
 import { Ambient } from './world/ambient';
 import { SHARED, PAL, setLightLevels, updateWind } from './world/ghibli';
-import { Court, COURT, COURT_RECT } from './court/court';
+import { Court, COURT } from './court/court';
 import { STOPS, type Restore } from './court/boards';
 import { createProfile, assign, recordFor, complete, type Profile } from './court/adapt';
 import { rating, type Dir } from './court/rules';
@@ -22,9 +22,10 @@ const STEP = 1 / 60;
 const params = new URLSearchParams(location.search);
 const SAVE_KEY = 'moth-court-v1';
 
-// Kettle's modes around the puzzle court: walking free, hopping on, drifting on the court, the win
-// (embers fly to the spirit, a piece of the terrace comes back), the result card, hopping off.
-type Mode = 'free' | 'enter' | 'court' | 'win' | 'card' | 'leave';
+// Kettle always walks free. In the spark yard it baps a little spark, which zips until something stops it
+// (Spark Trail's rule). 'win' is the short moment after a first win when the camera visits the piece of
+// the terrace that came back; Kettle waits while it plays.
+type Mode = 'free' | 'win';
 
 async function main() {
   await RAPIER.init();
@@ -94,9 +95,9 @@ async function main() {
   if (touch) input.device = 'touch';
   const sound = new Sound();
 
-  // --- the puzzle court, its rounds and the saved progress ---
+  // --- the spark yard, its rounds and the saved progress ---
   const glowTex = glowTexture();
-  const court = new Court(glowTex);
+  const court = new Court(glowTex, world);
   scene.add(court.group);
   let profile: Profile = createProfile();
   let nextStop = 0; // the first stop not finished yet; STOPS.length once the spirit is awake
@@ -107,7 +108,7 @@ async function main() {
   } catch { /* a private window starts fresh */ }
   if (params.has('round')) nextStop = THREE.MathUtils.clamp(+params.get('round')! - 1, 0, STOPS.length);
   const save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify({ profile, next: nextStop })); } catch { /* not kept, play goes on */ } };
-  let stopIndex = -1; // the stop on the court right now
+  let stopIndex = -1; // the stop in the yard right now
   let replaying = false;
 
   const fireflies = level.fireflies.map((p) => {
@@ -122,8 +123,6 @@ async function main() {
   }));
   scene.add(beacon);
   const beaconAt = new THREE.Vector3();
-  const courtDoor = new THREE.Vector3(COURT_RECT.x0 + 0.45, COURT.y, COURT.cz);
-  const courtExit = new THREE.Vector3(COURT_RECT.x0 - 0.75, 0.02, COURT.cz);
   const courtCentre = new THREE.Vector3(COURT.cx, 0, COURT.cz);
 
   // --- UI ---
@@ -136,17 +135,11 @@ async function main() {
   const banner = document.getElementById('banner')!;
   const startEl = document.getElementById('start')!;
   const bar = document.getElementById('courtbar')!;
-  const card = document.getElementById('result')!;
-  const cardStars = [...card.querySelectorAll('.stars i')] as HTMLElement[];
-  const cardRoute = card.querySelector('.route') as HTMLElement, cardRetry = card.querySelector('[data-act="retry"]') as HTMLButtonElement;
-  const cardNext = card.querySelector('[data-act="next"]') as HTMLButtonElement;
   document.getElementById('controls-hint')!.textContent = touch
     ? 'Left thumb moves. Jump and Bap on the right. Drag to look.'
     : 'Move WASD · Jump Space · Bap E · Drag to look. Gamepad works too.';
   document.getElementById('touch')!.hidden = !touch;
-  for (const b of bar.querySelectorAll('button')) b.addEventListener('click', () => input.press(b.dataset.act as 'undo' | 'restart' | 'leave'));
-  cardRetry.addEventListener('click', () => cardChoice('retry'));
-  cardNext.addEventListener('click', () => cardChoice('next'));
+  for (const b of bar.querySelectorAll('button')) b.addEventListener('click', () => input.press(b.dataset.act as 'undo' | 'restart'));
   let started = false, swallow = false;
   let introT = -1;
   const INTRO = 6.0;
@@ -156,7 +149,7 @@ async function main() {
     // the key or button that started the game must not also jump, bap or hurry the intro
     input.takeJump(); input.takePaw(); input.takeAction('confirm'); swallow = true;
     introT = params.has('nointro') ? INTRO : 0;
-    if (introT === 0 && nextStop < STOPS.length) setTimeout(() => showBanner('Wake the spirit with embers from its court.', 3800), 900);
+    if (introT === 0 && nextStop < STOPS.length) setTimeout(() => showBanner('Help the little sparks wake the spirit.', 3800), 900);
   };
   document.getElementById('go')!.addEventListener('click', begin);
   input.onAny = () => { if (started) sound.start(); };
@@ -168,13 +161,13 @@ async function main() {
     banner.textContent = text; banner.hidden = false; banner.style.opacity = '1';
     bannerFade = setTimeout(() => { banner.style.opacity = '0'; bannerHide = setTimeout(() => (banner.hidden = true), 1000); }, ms);
   }
-  // the HUD: walking, only the goal; on the court, three ember dots, the board's name and the drift count
+  // the HUD: walking, only the goal; in the yard, three ember dots, the puzzle's name and the bap count
   let hudKey = '';
   function updateHud() {
-    const onCourt = mode !== 'free' && mode !== 'leave' && !!court.state;
+    const onCourt = nearYard && !!court.state;
     const mask = court.state?.mask ?? 0;
     const goal = onCourt ? court.board!.name : nextStop >= STOPS.length ? 'The mill is awake' : 'Wake the sleeping spirit';
-    const count = onCourt ? `${court.moves} ${court.moves === 1 ? 'drift' : 'drifts'}` : '';
+    const count = onCourt ? `${court.moves} ${court.moves === 1 ? 'bap' : 'baps'}` : '';
     const key = `${onCourt}|${mask}|${goal}|${count}`;
     if (key === hudKey) return;
     hudKey = key;
@@ -187,8 +180,8 @@ async function main() {
   const movedFrom = level.anchors.start.clone();
   const anchorAt = new THREE.Vector3();
   const above = (p: THREE.Vector3, h: number) => anchorAt.set(p.x, p.y + h, p.z);
-  let courtVisits = 0, driftsMade = 0, pushedOnce = false, gateOnce = false;
-  const onCourtNow = () => mode === 'court' && court.busy === 0;
+  let baps = 0, pushedOnce = false, gateOnce = false, stuck = 0, undoneOnce = false;
+  const inYard = () => nearYard && !!court.state && mode === 'free' && court.busy === 0 && !court.drifting;
   const steps = [
     { line: 'Follow the path.', key: () => input.glyph('move'), anchor: () => above(player.pos, 1.0),
       show: () => mode === 'free', done: () => player.pos.distanceTo(movedFrom) > 2.5 },
@@ -196,16 +189,18 @@ async function main() {
       show: () => mode === 'free' && player.pos.distanceTo(level.anchors.wall) < 5, done: () => player.usedDouble || (player.grounded && player.pos.y > 2.3) },
     { line: 'Bap the gate open.', key: () => input.glyph('paw'), anchor: () => level.anchors.gate,
       show: () => mode === 'free' && player.pos.distanceTo(level.gate.centre) < 3.5, done: () => level.gate.opening },
-    { line: 'Step onto the court.', key: () => '', anchor: () => above(courtDoor, 0.9),
-      show: () => mode === 'free' && nextStop < STOPS.length && player.pos.distanceTo(courtDoor) < 6, done: () => courtVisits > 0 },
-    { line: 'Pick a way. Drift until something stops.', key: () => (input.device === 'touch' ? 'Swipe' : input.glyph('move')), anchor: () => above(court.kettle, 1.0),
-      show: onCourtNow, done: () => driftsMade >= 2 },
-    { line: 'Gather three embers. Then stop in the bowl.', key: () => '', anchor: () => above(court.bowlAt, 0.7),
-      show: () => onCourtNow() && !court.drifting && (court.state?.mask ?? 0) !== 7, done: () => nextStop > 0 },
-    { line: 'Bump the crate. It slides one stone.', key: () => '', anchor: () => above(court.crateAt ?? court.kettle, 1.0),
-      show: () => onCourtNow() && court.hasCrate && !court.drifting, done: () => pushedOnce },
-    { line: 'Cross the brass stone to open the gate.', key: () => '', anchor: () => above(court.plateAt ?? court.kettle, 0.6),
-      show: () => onCourtNow() && court.hasGate && !court.drifting && !court.state!.opened, done: () => gateOnce },
+    { line: 'Bap the spark. It zips until stopped.', key: () => input.glyph('paw'), anchor: () => above(court.spark, 0.75),
+      show: inYard, done: () => baps >= 1 },
+    { line: 'Walk round it to bap another way.', key: () => '', anchor: () => above(court.spark, 0.75),
+      show: inYard, done: () => baps >= 3 },
+    { line: 'Gather three embers, then stop in the bowl.', key: () => '', anchor: () => above(court.bowlAt, 0.7),
+      show: () => inYard() && (court.state?.mask ?? 0) !== 7, done: () => nextStop > 0 },
+    { line: 'The spark nudges a crate one stone.', key: () => '', anchor: () => above(court.crateAt ?? court.spark, 1.0),
+      show: () => inYard() && court.hasCrate, done: () => pushedOnce },
+    { line: 'Zip over the brass stone to open gates.', key: () => '', anchor: () => above(court.plateAt ?? court.spark, 0.6),
+      show: () => inYard() && court.hasGate && !court.state!.opened, done: () => gateOnce },
+    { line: 'Stuck? Step back or start over.', key: () => (input.device === 'keyboard' ? 'Z · R' : input.device === 'gamepad' ? 'LB · Y' : ''), anchor: () => above(court.spark, 0.75),
+      show: () => inYard() && stuck >= 3, done: () => undoneOnce },
   ];
   // a step, once done, stays done; the line shown is the first open step that applies right now
   const stepDone = steps.map(() => false);
@@ -289,127 +284,67 @@ async function main() {
     cam.lookAt(tmp);
   }
 
-  // --- the court: camera shot, entering and leaving, drifting, winning ---
+  // --- the spark yard: bapping the spark, raising puzzles, winning ---
   let mode: Mode = 'free';
   let modeT = 0;
   const shotPos = new THREE.Vector3(), shotLook = new THREE.Vector3();
   const wantPos = new THREE.Vector3(), wantLook = new THREE.Vector3();
-  let shotW = 0; // 0 = the follow camera, 1 = the court (or a restoration) shot
+  let shotW = 0; // 0 = the follow camera, 1 = a restoration shot
   let restoreShot: { p: THREE.Vector3; l: THREE.Vector3 } | null = null;
-  /** The court seen from above the terrace wall, the whole board in frame whatever the screen shape. */
-  function courtShot(outPos: THREE.Vector3, outLook: THREE.Vector3) {
-    const aspect = innerWidth / innerHeight, half = (camera.cam.fov * Math.PI) / 360;
-    // on a short screen (a phone on its side) the board sits a little higher, clear of the buttons below it
-    const short = innerHeight < 560;
-    const fitV = (short ? 3.8 : 3.35) / Math.tan(half), fitH = 3.45 / (Math.tan(half) * aspect);
-    const d = Math.max(fitV, fitH), el = THREE.MathUtils.degToRad(57);
-    outLook.set(COURT.cx, 0.1, COURT.cz + (short ? 0.75 : 0.25));
-    outPos.set(outLook.x, outLook.y + Math.sin(el) * d, outLook.z + Math.cos(el) * d);
-  }
-  const hopFrom = new THREE.Vector3(), hopTo = new THREE.Vector3();
-  let hopT = -1, hopFacing = 0;
-  function startHop(to: THREE.Vector3) {
-    hopFrom.copy(player.pos); hopTo.copy(to); hopT = 0;
-    const dx = to.x - hopFrom.x, dz = to.z - hopFrom.z;
-    if (dx * dx + dz * dz > 1e-4) hopFacing = Math.atan2(dx, dz);
-    sound.jump(); moth.kick('jump');
-  }
-  function stopFor(i: number) { return STOPS[i]; }
+  let nearYard = false, yardArmed = true, raiseAfter = 0, restAt = -1;
   function pickReplay(from: number) {
     for (let k = 0; k < STOPS.length; k++) { const i = (from + k) % STOPS.length; if ((profile.keys[STOPS[i].id] ?? 0) < 3) return i; }
     return -1;
   }
-  function enterCourt() {
-    courtVisits++;
-    const want = nextStop < STOPS.length ? nextStop : stopIndex >= 0 && court.board ? stopIndex : Math.max(0, pickReplay(0));
-    replaying = nextStop >= STOPS.length;
-    if (want !== stopIndex || !court.board) {
-      stopIndex = want;
-      const board = assign(profile, stopFor(stopIndex));
-      recordFor(profile, board).attempts++;
-      waitPlaced = court.placed; court.load(board);
-      sound.rise();
-      for (let i = 0; i < 16; i++) particles.emit(tmp.set(COURT.cx + (Math.random() - 0.5) * 5, 0.25, COURT.cz + (Math.random() - 0.5) * 5), new THREE.Vector3(0, 0.6 + Math.random(), 0), 0.12, 1.2, dustCol, 0.5, 1.8, 0.4);
-      save();
-    }
-    mode = 'enter'; modeT = 0;
-    if (waitPlaced < 0) startHop(court.kettleCell);
-    courtShot(shotPos, shotLook);
-    dirArmed = false; queued = null;
+  /** The next puzzle the yard offers: the first unfinished stop, then, once the spirit is awake, any stop below three flames. */
+  function wantStop() { return nextStop < STOPS.length ? nextStop : pickReplay(stopIndex + 1); }
+  function raiseBoard(i: number) {
+    stopIndex = i; replaying = nextStop >= STOPS.length;
+    const board = assign(profile, STOPS[i]);
+    recordFor(profile, board).attempts++;
+    court.load(board); sound.rise(); stuck = 0;
+    for (let k = 0; k < 16; k++) particles.emit(tmp.set(COURT.cx + (Math.random() - 0.5) * 5, 0.25, COURT.cz + (Math.random() - 0.5) * 5), new THREE.Vector3(0, 0.6 + Math.random(), 0), 0.12, 1.2, dustCol, 0.5, 1.8, 0.4);
+    save();
   }
-  function leaveCourt() {
-    mode = 'leave'; modeT = 0; card.hidden = true; bar.hidden = true;
-    startHop(courtExit);
-    hopFacing = -Math.PI / 2;
+  /**
+   * Which way a bap sends the spark: away from Kettle, along the stones' rows or columns. Kettle must be close
+   * and turned toward it; `reach` is a little longer for the aim hint than for the bap itself.
+   */
+  function bapDir(reach: number): Dir | null {
+    const dx = court.spark.x - player.pos.x, dz = court.spark.z - player.pos.z;
+    const h = Math.hypot(dx, dz);
+    if (h > reach || h < 0.05 || Math.abs(court.spark.y - player.pos.y) > 1.1) return null;
+    const fx = Math.sin(player.facing), fz = Math.cos(player.facing);
+    if ((dx * fx + dz * fz) / h < 0.2) return null;
+    const vx = dx / h + fx * 0.5, vz = dz / h + fz * 0.5;
+    return Math.abs(vx) > Math.abs(vz) ? (vx > 0 ? 'right' : 'left') : (vz > 0 ? 'down' : 'up');
   }
-  // input on the court: one push, one drift; a new push can wait while Kettle is still drifting
-  let dirArmed = false, queued: Dir | null = null;
-  let swipeX = 0, swipeY = 0, swipeQuiet = 0;
-  function readDir(dt: number, look: number[], tap: Dir | null): Dir | null {
-    const mx = input.moveX, my = input.moveY, mag = Math.max(Math.abs(mx), Math.abs(my));
-    let d: Dir | null = null;
-    if (mag < 0.3) dirArmed = true;
-    else if (dirArmed && mag > 0.5) { d = Math.abs(mx) > Math.abs(my) ? (mx > 0 ? 'right' : 'left') : (my > 0 ? 'up' : 'down'); dirArmed = false; }
-    if (tap) { d = tap; dirArmed = false; }
-    // a swipe or a mouse drag anywhere also picks a way
-    if (look[0] || look[1]) { swipeX += look[0]; swipeY += look[1]; swipeQuiet = 0; } else swipeQuiet += dt;
-    if (swipeQuiet > 0.18) swipeX = swipeY = 0;
-    const sw = Math.max(Math.abs(swipeX), Math.abs(swipeY));
-    if (!d && sw > 34 && sw < 1e5) {
-      d = Math.abs(swipeX) > Math.abs(swipeY) ? (swipeX > 0 ? 'right' : 'left') : (swipeY > 0 ? 'down' : 'up');
-      swipeX = swipeY = 1e6; // one swipe, one drift: wait for the finger to rest
-    }
-    return d;
+  function bapSpark() {
+    if (mode !== 'free' || !court.state || court.drifting || court.busy > 0) return false;
+    const d = bapDir(1.05);
+    if (!d) return false;
+    if (court.drift(d)) { baps++; if (court.moves > (court.board?.par ?? 0) + 3) stuck++; } else stuck++;
+    return true;
   }
-  let winT = 0, winFirst = false, winStars = 0;
+  let winT = 0, winFirst = false, winLine = '';
   function onWin() {
-    mode = 'win'; modeT = 0; winT = 0; bar.hidden = true;
-    const stop = stopFor(stopIndex), board = court.board!;
+    const stop = STOPS[stopIndex], board = court.board!;
     const before = profile.keys[stop.id] ?? 0;
     const res = complete(profile, stop, board, court.moves);
-    winStars = res.stars;
     winFirst = !replaying && stopIndex === nextStop && before === 0;
-    sound.win(); moth.kick('happy');
+    winLine = res.stars === 3 ? `Lit in ${court.moves} ${court.moves === 1 ? 'bap' : 'baps'}, the shortest way.` : `Lit in ${court.moves} baps. Shortest is ${board.par}.`;
+    sound.win(); moth.kick('happy'); court.settle();
     particles.burst(tmp.copy(court.bowlAt).setY(COURT.y + 0.4), 18, 1.6, 0.12, amber, 0.9, 0.7);
     if (winFirst) {
       nextStop = stopIndex + 1;
+      mode = 'win'; modeT = 0; winT = 0;
+      shotPos.copy(camera.cam.position); shotLook.set(lerpPos.x, lerpPos.y + T.camHeight, lerpPos.z);
       // the embers rise from the bowl and fly to the spirit, then the piece comes back
       setTimeout(() => court.release(tmp.set(level.spirit.x, level.spirit.y + 1.5, level.spirit.z).clone(), () => restore(stop.restore, false)), 650);
+    } else {
+      showBanner(winLine, 2800);
+      restAt = time + 1.6;
     }
-    save();
-  }
-  function showCard() {
-    mode = 'card'; modeT = 0;
-    const board = court.board!;
-    cardStars.forEach((s, i) => s.classList.toggle('lit', i < winStars));
-    cardRoute.textContent = winStars === 3 && court.moves <= board.par ? `${court.moves} drifts, the shortest route` : `Your route ${court.moves} · Shortest ${board.par}`;
-    cardRetry.hidden = winStars === 3;
-    const last = replaying ? pickReplay(stopIndex + 1) < 0 || pickReplay(stopIndex + 1) === stopIndex : nextStop >= STOPS.length;
-    cardNext.textContent = last ? 'Done' : 'Next';
-    card.hidden = false; bar.hidden = true;
-    input.takeAction('confirm'); input.takeAction('restart');
-  }
-  function cardChoice(c: 'retry' | 'next') {
-    if (mode !== 'card') return;
-    card.hidden = true;
-    if (c === 'retry') {
-      recordFor(profile, court.board!).attempts++;
-      waitPlaced = court.placed; court.load(court.board!); sound.rise();
-      mode = 'court'; modeT = 0; dirArmed = false; queued = null; bar.hidden = false;
-      return;
-    }
-    const nxt = replaying ? pickReplay(stopIndex + 1) : nextStop;
-    if (nxt < 0 || nxt >= STOPS.length || (replaying && nxt === stopIndex)) {
-      // all rounds done: the court rests and Kettle steps back out into the waking garden
-      court.rest(); stopIndex = -1;
-      leaveCourt();
-      return;
-    }
-    stopIndex = nxt;
-    const board = assign(profile, stopFor(stopIndex));
-    recordFor(profile, board).attempts++;
-    waitPlaced = court.placed; court.load(board); sound.rise();
-    mode = 'court'; modeT = 0; dirArmed = false; queued = null; bar.hidden = false;
     save();
   }
 
@@ -469,15 +404,8 @@ async function main() {
   let camOverride: { p: THREE.Vector3; t: THREE.Vector3; rel: boolean } | null = null;
   let gatePush = 0;
   let fps = 60;
-  let outsideFor = 1;
-  const driftVel = new THREE.Vector3();
-
-  /** While Kettle is on the court (or hopping on and off) the court moves it, not the character controller. */
-  function placeKettle(p: THREE.Vector3, vel: THREE.Vector3) {
-    player.pos.copy(p); player.vel.copy(vel); player.grounded = true;
-    player.body.setTranslation({ x: p.x, y: p.y + HALF + RADIUS, z: p.z }, true);
-    prevPos.copy(p); curPos.copy(p);
-  }
+  const tops: { p: THREE.Vector3; top: number }[] = [];
+  let trailAcc = 0;
 
   function frame(now: number) {
     // ask for the next frame first, so one surprise can never freeze the game
@@ -505,7 +433,8 @@ async function main() {
     const free = mode === 'free';
     if (started && !inIntro && hud.hidden) hud.hidden = false;
     minimap.el.hidden = !(started && !inIntro && free);
-    if (free !== bodyFree) { bodyFree = free; document.body.classList.toggle('on-court', !free); }
+    // while the camera visits a restored piece, Kettle waits
+    if (!free) { input.moveX = input.moveY = 0; input.jumpHeld = input.pawHeld = false; input.takeJump(); input.takePaw(); look[0] = look[1] = 0; }
     updateWind(dt);
     modeT += dt;
 
@@ -524,12 +453,10 @@ async function main() {
     while (acc >= STEP && n < 5) {
       prevPos.copy(curPos);
       if (inIntro && introT < INTRO - 0.9) { input.takeJump(); input.takePaw(); }
-      if (free) {
-        player.update(STEP, input, moveYaw);
-        world.step();
-        curPos.copy(player.pos);
-        for (const e of player.events) handleEvent(e);
-      } else world.step();
+      player.update(STEP, input, moveYaw);
+      world.step();
+      curPos.copy(player.pos);
+      for (const e of player.events) handleEvent(e);
       for (const p of level.pots) {
         if (p.broken) continue;
         const v = p.body.linvel(); const vv = potV.set(v.x, v.y, v.z);
@@ -543,80 +470,64 @@ async function main() {
     if (n === 5) acc = 0;
     lerpPos.lerpVectors(prevPos, curPos, acc / STEP);
 
-    // --- the court ---
-    if (free) {
-      const inside = court.contains(player.pos, -0.1) && player.pos.y < 0.7 && !player.floating;
-      outsideFor = inside ? 0 : outsideFor + dt;
-      if (inside && started && !inIntro && outsideFor === 0 && leftAt + 0.6 < time && (nextStop < STOPS.length || pickReplay(0) >= 0 || court.board)) enterCourt();
+    // --- the spark yard ---
+    const wasNear = nearYard;
+    nearYard = court.contains(player.pos, 1.2) && player.pos.y < 2.2;
+    if (!nearYard && wasNear) yardArmed = true;
+    // a puzzle rises when Kettle comes to the yard (after the finale, only once Kettle has left and come back)
+    if (!court.board && nearYard && started && !inIntro && free && time > raiseAfter && restAt < 0 && (nextStop < STOPS.length || yardArmed)) {
+      const i = wantStop();
+      if (i >= 0) raiseBoard(i);
     }
-    // jumping is for the garden; on the court Space steps out, on the card it means Next
-    const jumpPressed = !free && input.takeJump();
-    const tap = input.takeTapDir();
-    const showPreview = mode === 'court' && hopT < 0 && waitPlaced < 0;
-    court.update(dt, showPreview);
-    // a new board has risen: Kettle hops onto its start stone
-    if (waitPlaced >= 0 && court.placed > waitPlaced) { waitPlaced = -1; startHop(court.kettleCell); }
-    if (mode === 'enter' && hopT < 0 && waitPlaced < 0 && court.busy === 0) { mode = 'court'; bar.hidden = false; }
-    if (mode === 'court') {
-      let d = readDir(dt, look, tap);
-      if (d && (court.drifting || court.busy > 0 || hopT >= 0 || waitPlaced >= 0)) { queued = d; d = null; }
-      if (!d && queued && !court.drifting && court.busy === 0 && hopT < 0 && waitPlaced < 0) { d = queued; queued = null; }
-      if (d && court.drift(d)) driftsMade++;
-      if (!court.drifting && court.busy === 0) {
-        if (input.takePaw() || input.takeAction('undo')) { if (court.undo()) { sound.undo(); recordFor(profile, court.board!).undos++; puffAt(court.kettle); } }
-        if (input.takeAction('restart')) { if (court.restart()) { sound.undo(); recordFor(profile, court.board!).restarts++; puffAt(court.kettle); } }
-      }
-      if (input.takeAction('leave') || (jumpPressed && modeT > 0.4 && !court.drifting && waitPlaced < 0)) leaveCourt();
-    } else { input.takePaw(); input.takeAction('undo'); input.takeAction('restart'); if (mode !== 'card') input.takeAction('leave'); }
+    if (restAt >= 0 && time > restAt) { restAt = -1; court.rest(); raiseAfter = time + 0.9; if (nextStop >= STOPS.length) yardArmed = false; }
+    court.sparkLook = nearYard ? player.pos : null;
+    court.update(dt, free && nearYard ? bapDir(1.35) : null);
+    if (nearYard && free && court.state && !court.drifting && court.busy === 0) {
+      if (input.takeAction('undo')) { if (court.undo()) { sound.undo(); recordFor(profile, court.board!).undos++; puffAt(court.spark); undoneOnce = true; stuck = 0; } }
+      if (input.takeAction('restart')) { if (court.restart()) { sound.undo(); recordFor(profile, court.board!).restarts++; puffAt(court.spark); undoneOnce = true; stuck = 0; } }
+    } else { input.takeAction('undo'); input.takeAction('restart'); }
+    input.takeAction('confirm');
+    bar.hidden = !(nearYard && free && !!court.state && started && !inIntro);
     for (const e of court.events) {
       switch (e.type) {
         case 'drift': sound.drift(e.tiles); break;
-        case 'key': sound.ember(e.count - 1); particles.burst(tmp.copy(court.kettle).setY(COURT.y + 0.4), 10, 1.0, 0.08, amber, 0.9, 0.6); break;
+        case 'key': sound.ember(e.count - 1); particles.burst(tmp.copy(court.spark).setY(COURT.y + 0.4), 10, 1.0, 0.08, amber, 0.9, 0.6); break;
         case 'switch': sound.bell(); setTimeout(() => sound.gateSink(), 250); gateOnce = true; break;
         case 'push': sound.push(); pushedOnce = true; break;
-        case 'stop': sound.stop(e.strength); moth.kick('land', 0.25 + e.strength * 0.4); break;
+        case 'stop': sound.stop(e.strength); break;
         case 'bump': sound.bump(); break;
         case 'ready': sound.bowlReady(); break;
         case 'won': onWin(); break;
       }
     }
+    // a warm trail behind the zipping spark
+    if (court.drifting) {
+      trailAcc += dt;
+      while (trailAcc > 0.025) { trailAcc -= 0.025; particles.emit(tmp.copy(court.spark).setY(COURT.y + 0.28), new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.25 + Math.random() * 0.3, (Math.random() - 0.5) * 0.3), 0.07, 0.5, amber, 0.8, 0.4, 2); }
+    }
     if (mode === 'win') {
       winT += dt;
-      // the restoration shot holds a moment, then the camera comes back to the court and the card shows
-      if (restoreShot && winT > 4.4) restoreShot = null;
-      if ((!winFirst && winT > 1.1) || (winFirst && winT > 5.4)) showCard();
+      // the restoration shot holds a moment, then the camera comes back to Kettle and the result shows
+      if (restoreShot && winT > 4.6) restoreShot = null;
+      if (winT > 5.0) {
+        mode = 'free'; modeT = 0;
+        if (nextStop >= STOPS.length && !finaleShown) { finaleShown = true; showBanner('The mill is awake. Thank you, Kettle.', 3600); }
+        else showBanner(winLine, 2800);
+        restAt = time + 0.4;
+      }
     }
-    if (mode === 'card') {
-      if (input.takeAction('confirm') || (jumpPressed && modeT > 0.3)) cardChoice('next');
-      else if (input.takeAction('restart') && !cardRetry.hidden) cardChoice('retry');
-    }
-    if (mode === 'leave' && hopT < 0) {
-      mode = 'free'; leftAt = time;
-      camera.snap(player.pos, player.facing);
-      if (nextStop >= STOPS.length && !finaleShown) { finaleShown = true; showBanner('The mill is awake. Thank you, Kettle.', 3600); }
-    }
-
-    // hopping on and off the court; drifting on it
-    if (hopT >= 0) {
-      hopT = Math.min(1, hopT + dt / 0.5);
-      const k = hopT * hopT * (3 - 2 * hopT);
-      tmpV.lerpVectors(hopFrom, hopTo, k); tmpV.y += Math.sin(hopT * Math.PI) * 0.55;
-      driftVel.subVectors(hopTo, hopFrom).multiplyScalar(1.6);
-      player.facing = hopFacing;
-      placeKettle(tmpV, driftVel);
-      lerpPos.copy(tmpV);
-      if (hopT >= 1) { hopT = -1; sound.land(0.3); moth.kick('land', 0.35); if (mode !== 'leave') court.kettle.copy(hopTo); }
-    } else if (mode !== 'free' && mode !== 'leave' && waitPlaced < 0) {
-      // check mode itself, not "free": stepping off can end earlier in this same frame
-      player.facing = court.kettleFacing;
-      placeKettle(court.kettle, court.kettleVel);
-      lerpPos.copy(court.kettle);
+    // a piece that rises (or snaps back on undo) where Kettle stands lifts Kettle onto its top
+    for (const s of court.solidTops(tops)) {
+      if (Math.abs(player.pos.x - s.p.x) < 0.42 && Math.abs(player.pos.z - s.p.z) < 0.42 && player.pos.y < s.top - 0.08 && player.pos.y > s.top - 1.2) {
+        player.body.setTranslation({ x: player.pos.x, y: s.top + 0.75, z: player.pos.z }, true);
+        player.pos.y = s.top + 0.05; prevPos.copy(player.pos); curPos.copy(player.pos);
+      }
     }
     level.syncDynamics();
     level.update(time, dt);
     SHARED.uPlayer.value.copy(lerpPos);
 
-    // the gate opens when bapped (see handleEvent) or when Moth leans on it for a moment
+    // the garden gate opens when bapped (see handleEvent) or when Moth leans on it for a moment
     if (!level.gate.opening) {
       const g = level.gate.centre;
       const near = Math.hypot(lerpPos.x - g.x, lerpPos.z - g.z) < 0.85 && Math.abs(lerpPos.y - (g.y - 0.5)) < 0.8;
@@ -629,12 +540,9 @@ async function main() {
     let df = player.facing - renderFacing; df = Math.atan2(Math.sin(df), Math.cos(df)); renderFacing += df * Math.min(1, dt * (free ? 20 : 14));
     moth.root.position.copy(lerpPos);
     moth.root.rotation.y = renderFacing;
-    // on the court Kettle glides as a little cloud: feet tucked, a little puffed up while it drifts
-    const gliding = !free && (court.drifting || hopT >= 0);
-    moth.float = THREE.MathUtils.damp(moth.float, gliding ? 0.45 : free ? player.float01 : 0, 10, dt);
+    moth.float = THREE.MathUtils.damp(moth.float, player.float01, 10, dt);
     moth.carrying = false;
-    const sp = gliding ? Math.min(1, Math.hypot(player.vel.x, player.vel.z) / T.runSpeed) : Math.hypot(player.vel.x, player.vel.z) / T.runSpeed;
-    moth.update(dt, sp, gliding ? false : player.grounded || player.floating, gliding ? tmpV.set(player.vel.x, 0, player.vel.z) : player.vel);
+    moth.update(dt, Math.hypot(player.vel.x, player.vel.z) / T.runSpeed, player.grounded || player.floating, player.vel);
     {
       blobRay.origin.x = lerpPos.x; blobRay.origin.y = lerpPos.y + 0.3; blobRay.origin.z = lerpPos.z;
       const hit = world.castRay(blobRay, 6, true, undefined, undefined, player.collider);
@@ -645,9 +553,9 @@ async function main() {
       (moth.blob.material as THREE.MeshBasicMaterial).opacity = 0.5 * Math.max(0, 1 - h / 3) * (1 - player.float01);
     }
 
-    // the beacon: over the way into the court while rounds wait there
+    // the beacon: over the spark yard while rounds wait there
     {
-      const want = free && nextStop < STOPS.length ? courtDoor : null;
+      const want = free && nextStop < STOPS.length && !nearYard ? (court.state ? court.spark : courtCentre) : null;
       goalAt = want ? courtCentre : null;
       const m = beacon.material as THREE.MeshBasicMaterial;
       if (want) {
@@ -710,16 +618,18 @@ async function main() {
       const base = camOverride.rel ? lerpPos : ORIGIN;
       camera.cam.position.copy(camOverride.p).add(base); camera.cam.lookAt(tmpV.copy(camOverride.t).add(base));
     } else {
-      camera.update(dt, lerpPos, free ? player.vel : ORIGIN, renderFacing, free ? look : [0, 0]);
+      // in the yard the camera rises a little and steps back, so the stones around the spark stay in view
+      camera.overview = THREE.MathUtils.damp(camera.overview, nearYard && court.state ? 1 : 0, 2, dt);
+      camera.update(dt, lerpPos, player.vel, renderFacing, look);
       if (inIntro) {
         introFollow.copy(camera.cam.position); introLook.set(lerpPos.x, lerpPos.y + T.camHeight, lerpPos.z);
         introCamera(introT, introFollow, introLook);
       }
-      // the court shot (or a restoration shot) blends over the follow camera
-      const wantShot = mode !== 'free' && mode !== 'leave';
-      shotW = THREE.MathUtils.damp(shotW, wantShot ? 1 : 0, wantShot ? 3.2 : 3.6, dt);
-      if (restoreShot) { wantPos.copy(restoreShot.p); wantLook.copy(restoreShot.l); } else courtShot(wantPos, wantLook);
-      const rate = restoreShot || mode === 'win' ? 2.2 : 6;
+      // a restoration shot blends over the follow camera
+      const wantShot = !!restoreShot;
+      shotW = THREE.MathUtils.damp(shotW, wantShot ? 1 : 0, wantShot ? 2.4 : 3.2, dt);
+      if (restoreShot) { wantPos.copy(restoreShot.p); wantLook.copy(restoreShot.l); }
+      const rate = 2.2;
       shotPos.x = THREE.MathUtils.damp(shotPos.x, wantPos.x, rate, dt); shotPos.y = THREE.MathUtils.damp(shotPos.y, wantPos.y, rate, dt); shotPos.z = THREE.MathUtils.damp(shotPos.z, wantPos.z, rate, dt);
       shotLook.x = THREE.MathUtils.damp(shotLook.x, wantLook.x, rate, dt); shotLook.y = THREE.MathUtils.damp(shotLook.y, wantLook.y, rate, dt); shotLook.z = THREE.MathUtils.damp(shotLook.z, wantLook.z, rate, dt);
       if (shotW > 0.001 && !inIntro) {
@@ -749,8 +659,7 @@ async function main() {
     if (!mapped) { mapped = true; minimap.capture(renderer, scene, [level.group]); }
     if (!minimap.el.hidden) minimap.update(dt, lerpPos, renderFacing, camera.yaw, goalAt, level.spirit);
   }
-  let waitPlaced = -1, bodyFree = true;
-  let leftAt = -10, finaleShown = nextStop >= STOPS.length;
+  let finaleShown = nextStop >= STOPS.length;
   function puffAt(p: THREE.Vector3) {
     for (let i = 0; i < 10; i++) particles.emit(tmp.set(p.x, p.y + 0.25, p.z), new THREE.Vector3((Math.random() - 0.5) * 1.4, Math.random() * 0.8, (Math.random() - 0.5) * 1.4), 0.14, 0.8, dustCol, 0.5, 1.6, 0.6);
   }
@@ -798,7 +707,8 @@ async function main() {
       case 'land': sound.land(e.strength); moth.kick('land', e.strength); break;
       case 'step': sound.step(level.surfaces.get(player.groundHandle) ?? 'grass'); break;
       case 'bap': {
-        sound.bap(e.hit); moth.kick('bap');
+        const sent = bapSpark();
+        sound.bap(e.hit || sent); moth.kick('bap');
         const g = level.gate.centre;
         if (!level.gate.opening && Math.hypot(player.pos.x - g.x, player.pos.z - g.z) < 1.5 && Math.abs(player.pos.y - (g.y - 0.5)) < 1) openGate();
         break;
@@ -843,11 +753,12 @@ async function main() {
     teleport: (x: number, y: number, z: number, facing: number) => {
       player.body.setTranslation({ x, y: y + 0.4, z }, true); player.pos.set(x, y, z); player.vel.set(0, 0, 0); player.facing = facing;
       prevPos.copy(player.pos); curPos.copy(player.pos);
+      camera.snap(player.pos, facing);
     },
-    enterCourt, cardChoice, drift: (d: Dir) => court.drift(d), solve: async () => (await import('./court/rules')).solve(court.board!, court.state!),
+    drift: (d: Dir) => court.drift(d), bapDir, variant: (i: number, v: number) => { stopIndex = i; court.load(STOPS[i].variants[v]); }, solve: async () => (await import('./court/rules')).solve(court.board!, court.state!),
     state: () => ({ pos: player.pos.toArray().map((v) => +v.toFixed(2)), grounded: player.grounded, floating: player.floating,
       mode, stop: stopIndex, next: nextStop, board: court.board?.variantId, moves: court.moves, mask: court.state?.mask, restored: [...restored],
-      step: stepIndex, gate: level.gate.opening, fps: Math.round(fps), stars: rating(court.moves, court.board?.par ?? 0),
+      step: stepIndex, baps, stuck, busy: +court.busy.toFixed(2), drifting: court.drifting, gate: level.gate.opening, fps: Math.round(fps), stars: rating(court.moves, court.board?.par ?? 0),
       calls: renderer.info.render.calls, tris: renderer.info.render.triangles, intro: +introT.toFixed(2), pr }),
   };
   if (params.has('autostart')) begin();

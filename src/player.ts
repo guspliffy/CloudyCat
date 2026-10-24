@@ -37,6 +37,7 @@ export class Player {
   private buffer = 0;
   private pawHeldFor = 0;
   private bapCd = 0;
+  private bapBuffer = 0;
   private stepAcc = 0;
   private lastSafe = new THREE.Vector3();
   private safeTimer = 0;
@@ -118,7 +119,9 @@ export class Player {
     // paw: tap to bap, hold near the sunlit gate to thin
     if (input.pawHeld) this.pawHeldFor += dt; else this.pawHeldFor = 0;
     this.bapCd -= dt;
-    if (pawPressed && this.bapCd <= 0) { this.bapCd = T.bapCooldown; this.bap(); }
+    // a bap pressed a moment too early (still cooling down) is kept and comes out as soon as it can
+    this.bapBuffer = pawPressed ? 0.25 : this.bapBuffer - dt;
+    if (this.bapBuffer > 0 && this.bapCd <= 0) { this.bapBuffer = 0; this.bapCd = T.bapCooldown; this.bap(); }
     const wantThin = this.pawHeldFor > T.thinHoldTime && this.nearGate(this.pos);
     const keepThin = this.thinning && input.pawHeld && this.insideGate();
     const nowThin = wantThin || keepThin;

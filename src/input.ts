@@ -4,10 +4,6 @@ export type Device = 'keyboard' | 'gamepad' | 'touch';
 
 const dz = (v: number) => (Math.abs(v) < 0.15 ? 0 : (v - Math.sign(v) * 0.15) / 0.85);
 
-const TAPS: Record<string, 'up' | 'down' | 'left' | 'right'> = {
-  ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
-};
-
 export class Input {
   moveX = 0; // right
   moveY = 0; // forward
@@ -23,9 +19,8 @@ export class Input {
   private padEdge = false;
   private padB = false;
   private padY = false;
-  private padMenu = false;
-  private actions = new Set<'undo' | 'restart' | 'leave' | 'confirm'>();
-  private tapDir: 'up' | 'down' | 'left' | 'right' | null = null;
+  private padLB = false;
+  private actions = new Set<'undo' | 'restart' | 'confirm'>();
   private look: [number, number] = [0, 0];
   private dragId: number | null = null;
   private dragX = 0;
@@ -47,13 +42,9 @@ export class Input {
       this.device = 'keyboard';
       this.keys.add(e.code);
       if (e.code === 'Space') { this.jumpEdge = true; e.preventDefault(); }
-      // a quick tap can come and go between two frames; the court still wants it
-      const tap = TAPS[e.code];
-      if (tap) this.tapDir = tap;
       if (e.code === 'KeyE' || e.code === 'KeyJ' || e.code === 'KeyK') this.pawEdge = true;
       if (e.code === 'KeyZ' || e.code === 'Backspace') { this.actions.add('undo'); e.preventDefault(); }
       if (e.code === 'KeyR') this.actions.add('restart');
-      if (e.code === 'Escape') this.actions.add('leave');
       if (e.code === 'Enter' || e.code === 'NumpadEnter') this.actions.add('confirm');
       this.onAny?.();
     });
@@ -114,7 +105,7 @@ export class Input {
 
   /** Let go of everything, for example when the tab is hidden. */
   clear() {
-    this.keys.clear(); this.jumpEdge = this.pawEdge = false; this.lookX = this.lookY = 0; this.actions.clear(); this.tapDir = null;
+    this.keys.clear(); this.jumpEdge = this.pawEdge = false; this.lookX = this.lookY = 0; this.actions.clear();
     this.touchJump = this.touchPaw = false;
     if (this.stickId !== null) { this.stickId = null; this.touchX = this.touchY = 0; this.hideStick(); }
     this.dragId = null;
@@ -147,11 +138,11 @@ export class Input {
       if (b && !this.padB) { this.pawEdge = true; this.padEdge = true; }
       jump ||= a; paw ||= b;
       this.padA = a; this.padB = b;
-      // Y restarts a court, Start or Back steps out of it
-      const y = !!p.buttons[3]?.pressed, menu = !!(p.buttons[8]?.pressed || p.buttons[9]?.pressed);
+      // in a puzzle yard Y starts over and LB steps back
+      const y = !!p.buttons[3]?.pressed, lb = !!p.buttons[4]?.pressed;
       if (y && !this.padY) this.actions.add('restart');
-      if (menu && !this.padMenu) this.actions.add('leave');
-      this.padY = y; this.padMenu = menu;
+      if (lb && !this.padLB) this.actions.add('undo');
+      this.padY = y; this.padLB = lb;
       // the right stick turns the view at the same speed whatever the frame rate
       this.lookX += dz(p.axes[2] ?? 0) * 540 * dt; this.lookY += dz(p.axes[3] ?? 0) * 360 * dt;
       break;
@@ -163,14 +154,12 @@ export class Input {
     this.jumpHeld = jump || this.touchJump;
     this.pawHeld = paw || this.touchPaw;
   }
-  /** The last direction key pressed since the last call, even if it is already let go. */
-  takeTapDir() { const d = this.tapDir; this.tapDir = null; return d; }
   takeJump() { const j = this.jumpEdge; this.jumpEdge = false; return j; }
   takePaw() { const p = this.pawEdge; this.pawEdge = false; return p; }
-  /** A court action (undo, restart, leave, confirm) was asked for since the last call. */
-  takeAction(a: 'undo' | 'restart' | 'leave' | 'confirm') { const had = this.actions.has(a); this.actions.delete(a); return had; }
+  /** A yard action (undo, restart) or confirm was asked for since the last call. */
+  takeAction(a: 'undo' | 'restart' | 'confirm') { const had = this.actions.has(a); this.actions.delete(a); return had; }
   /** Ask for an action from an on-screen button. */
-  press(a: 'undo' | 'restart' | 'leave' | 'confirm') { this.actions.add(a); }
+  press(a: 'undo' | 'restart' | 'confirm') { this.actions.add(a); }
   /** A gamepad button went down since the last call (to start the game from the pad). */
   takePadPress() { const p = this.padEdge; this.padEdge = false; return p; }
   /** The look drag since the last call. The returned pair is reused every frame. */
