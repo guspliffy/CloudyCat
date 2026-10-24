@@ -6,6 +6,7 @@ import { Meadow, Tuft, Flower } from './world/meadow';
 import { Kit, G } from './world/kit';
 import { stoneTex, tileTex, plankTex, plasterTex, flagTex, boxUV } from './world/textures';
 import { mulberry } from './world/sky';
+import { COURT, COURT_RECT } from './court/court';
 
 // Mill Terrace (docs/ART-GUIDE.md section 3). World: X east, -Z north, Y up, metres.
 // The cottage garden is a terrace raised 1.6 m. From the start you look over its low parapet, through the
@@ -15,7 +16,7 @@ import { mulberry } from './world/sky';
 export type Surface = 'grass' | 'stone' | 'wood';
 export const TERRACE_Y = 1.6;
 
-export interface Pot { body: RAPIER.RigidBody; mesh: THREE.Object3D; seed: number | null; spawn: THREE.Vector3; prevV: THREE.Vector3; broken: boolean }
+export interface Pot { body: RAPIER.RigidBody; mesh: THREE.Object3D; spawn: THREE.Vector3; prevV: THREE.Vector3; broken: boolean }
 
 type Seg = [number, number, number, number];
 const TERRACE = { x0: -10, x1: 9.3, z0: -9.5, z1: 7.8 };
@@ -63,7 +64,6 @@ export class Level {
   camBlock = new Set<number>();
   pots: Pot[] = [];
   crates: { body: RAPIER.RigidBody; mesh: THREE.Object3D; spawn: THREE.Vector3 }[] = [];
-  seeds: THREE.Vector3[] = [];
   spirit = new THREE.Vector3(2, 0.45, -18.5);
   wheel!: THREE.Group;
   lanterns: { glass: THREE.Mesh; halo: THREE.Sprite; pos: THREE.Vector3 }[] = [];
@@ -84,6 +84,7 @@ export class Level {
   spiritEyes: THREE.Object3D[] = [];
   spiritOpenEyes: THREE.Object3D[] = [];
   sunShafts: THREE.Mesh[] = [];
+  millWindows: THREE.Mesh[] = [];
   chimney = new THREE.Vector3(7.4, 5.6, 5.6);
   gate!: { leaves: THREE.Group[]; collider: RAPIER.Collider; open: number; opening: boolean; centre: THREE.Vector3 };
   anim: ((t: number, dt: number) => void)[] = [];
@@ -190,6 +191,7 @@ export class Level {
     this.cottage();
     this.garden();
     this.court();
+    this.puzzleCourt();
     this.riverSide();
     this.boundaries();
     this.scenery();
@@ -206,6 +208,7 @@ export class Level {
     line([[-0.4, -4.2], [-3.5, -6.8], [-7.0, -8.6], [-8.5, -10.2]]); // west, to the bank
     // court: from the steps to the hearth, the shed, the bridge; the bank back up
     line([[0, -12.5], [0.5, -14.6], [1.6, -16.5]]);
+    line([[0.4, -13.6], [COURT_RECT.x0 - 0.1, COURT.cz]]); // to the puzzle court
     line([[0.5, -14.6], [-1.8, -16.2], [-3.4, -17.4]]);
     line([[2.6, -16.6], [5.0, -18.8], [7.4, -22.4], [9.2, -24.5]]);
     line([[-8.5, -10.2], [-8.5, -16.2], [-6.0, -15.8], [-1.8, -16.2]]);
@@ -489,7 +492,7 @@ export class Level {
     this.clear(cx - w / 2 - 1.0, cz - d / 2 - 0.3, cx + w / 2 + 0.3, cz + d / 2 + 0.3);
   }
 
-  // ---------- the terrace garden: wall with the seed pot, barrels, vegetables, bird bath, bench ----------
+  // ---------- the terrace garden: wall with pots, barrels, vegetables, bird bath, bench ----------
   private garden() {
     const M = this.M, Y = TERRACE_Y;
     // low garden wall, beside the path
@@ -497,8 +500,8 @@ export class Level {
     this.kit.add(G.box(4.06, 0.06, 0.66), M.stoneDark, { x: 3.2, y: Y + 0.88, z: -3.0 });
     for (let i = 0; i < 6; i++) this.kit.add(G.ico(0.1 + this.rand() * 0.08, 1), M.moss, { x: 1.4 + i * 0.7, y: Y + 0.88, z: -2.75 + this.rand() * 0.1 }, [0, 0, 0], [1.5, 0.35, 1]);
     this.clear(1.0, -3.4, 5.4, -2.6);
-    this.addPot(4.2, Y + 0.91 + 0.22, -3.0, 0);
-    this.addPot(2.1, Y + 0.91 + 0.22, -3.0, null);
+    this.addPot(4.2, Y + 0.91 + 0.22, -3.0);
+    this.addPot(2.1, Y + 0.91 + 0.22, -3.0);
     // a sleeping frog at the wall's west end
     const frog = new THREE.Group(); frog.position.set(1.45, Y + 0.91, -3.0); frog.rotation.y = -0.6;
     const fm = pmat('#8DB360');
@@ -514,12 +517,11 @@ export class Level {
     this.kit.add(G.cyl(0.015, 0.015, 1.2, 6), M.wood, { x: 5.35, y: Y + 0.6, z: -2.6 }, [0.25, 0, 0.2]);
     this.kit.add(G.cone(0.1, 0.3, 8), M.straw, { x: 5.48, y: Y + 0.12, z: -2.44 }, [Math.PI + 0.25, 0, 0.2]);
 
-    // barrel stack: a crate as a step, a tall barrel with the second seed, a small barrel, a wheelbarrow of hay
+    // barrel stack: a crate as a step, a tall barrel, a small barrel, a wheelbarrow of hay
     this.addCrate(4.7, Y + 0.31, -5.6);
     this.box(5.2, Y + 0.5, -6.6, 1.0, 1.0, 1.0, M.plank, 'wood', { unit: 0.5 });
     this.barrel(6.2, Y, -7.0, 0.5, 2.0, true);
     this.barrel(7.3, Y, -6.3, 0.42, 1.2, true);
-    this.seeds.push(new THREE.Vector3(6.2, Y + 2.0 + 0.35, -7.0));
     this.kit.add(G.torus(0.14, 0.05, 6, 12), M.straw, { x: 7.3, y: Y + 1.25, z: -6.3 }, [Math.PI / 2, 0, 0]);
     this.kit.add(G.cyl(0.13, 0.16, 0.24, 10), M.plankDark, { x: 7.75, y: Y + 0.12, z: -5.6 });
     this.wheelbarrow(4.0, Y, -7.9, 0.4);
@@ -683,14 +685,13 @@ export class Level {
     this.kit.add(G.sph(0.18, 10, 6), M.stoneDark, { x: 1.7, y: 0.6, z: -13.0 }, [0, 0.3, 0], [1, 0.6, 0.62]);
     this.collBox(1.7, 0.35, -13.0, 0.36, 0.7, 0.24, 'stone', 0.3);
 
-    // the shed with the third seed on its roof, firewood, a rain barrel, a swallow nest
+    // the shed with firewood, a rain barrel, a swallow nest
     const sx = -6.2, sz = -19.2, sw = 3.2, sd = 2.6, sh = 1.9;
     this.box(sx, sh / 2, sz, sw, sh, sd, M.plaster, 'stone', { block: true, unit: 2.5 });
     this.box(sx, 0.15, sz, sw + 0.1, 0.3, sd + 0.1, M.stone, undefined, { unit: 1.2 });
     for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) this.kit.add(G.box(0.14, sh, 0.14), M.woodDark, { x: sx + (x * sw) / 2, y: sh / 2, z: sz + (z * sd) / 2 });
     this.kit.add(boxUV(G.box(sw + 0.6, 0.16, sd + 0.6), sw + 0.6, 0.16, sd + 0.6, 1), M.tile, { x: sx, y: sh + 0.25, z: sz }, [0.12, 0, 0]);
     this.collBox(sx, sh + 0.2, sz, sw + 0.6, 0.3, sd + 0.6, 'wood', 0, true);
-    this.seeds.push(new THREE.Vector3(sx - 0.2, sh + 0.75, sz - 0.1));
     this.kit.add(boxUV(G.box(0.9, 1.4, 0.08), 0.9, 1.4, 0.08, 1), M.plankDark, { x: sx + 0.6, y: 0.31 + 0.7, z: sz + sd / 2 + 0.04 });
     this.kit.add(G.box(0.6, 0.6, 0.06), M.glassDark, { x: sx - 0.7, y: 1.15, z: sz + sd / 2 + 0.02 });
     this.kit.add(G.box(0.32, 0.64, 0.05), M.plank, { x: sx - 1.15, y: 1.15, z: sz + sd / 2 + 0.15 }, [0, -0.9, 0]);
@@ -729,6 +730,38 @@ export class Level {
     this.anim.push((t) => { hg.rotation.z = Math.sin(t * 0.8) * 0.02; });
     this.tree(6.4, 0, -26.0, 1.05);
     this.tree(-11.4, 0, -14.2, 0.8, 0.03);
+  }
+
+  // ---------- the puzzle court: a flagstone yard on the east lawn where Spark Trail's boards rise ----------
+  private puzzleCourt() {
+    const M = this.M, R = COURT_RECT, t = COURT.tile, n = COURT.n;
+    const w = R.x1 - R.x0, d = R.z1 - R.z0, cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2;
+    // bedding slab with dark joints, then 36 flagstones, two tones scattered so the grid reads at a glance
+    this.box(cx, 0.025, cz, w - 0.3, 0.15, d - 0.3, pmat('#A79C8C'), undefined, { unit: 1.2 });
+    // three close tones of pale sandstone, each stone with a softly rounded top edge
+    const flags = [pmat('#EAE0CC'), pmat('#E2D6BE'), pmat('#D9CCB2')];
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+      const x = COURT.cx + (c - (n - 1) / 2) * t, z = COURT.cz + (r - (n - 1) / 2) * t;
+      const h = hash2(r * 3.1 + 0.5, c * 5.3 + 0.2);
+      const mat = flags[Math.floor(h * 2.999)];
+      this.box(x, COURT.y - 0.045, z, t - 0.07, 0.07, t - 0.07, mat);
+      this.box(x, COURT.y - 0.005, z, t - 0.11, 0.01, t - 0.11, mat);
+      if (h > 0.82) this.kit.add(G.ico(0.05, 0), M.moss, { x: x + (t / 2 - 0.04) * (h > 0.9 ? 1 : -1), y: COURT.y - 0.012, z: z + t / 2 - 0.04 }, [0, 0, 0], [1.6, 0.35, 1.2]);
+    }
+    // a low kerb of dressed stone round the yard, one step high, mossy at the corners
+    const k = 0.22, kh = 0.21;
+    this.box(cx, kh / 2 - 0.02, R.z0 + k / 2, w, kh, k, M.stone, undefined, { unit: 1.2 });
+    this.box(cx, kh / 2 - 0.02, R.z1 - k / 2, w, kh, k, M.stone, undefined, { unit: 1.2 });
+    this.box(R.x0 + k / 2, kh / 2 - 0.02, cz, k, kh, d - 2 * k, M.stone, undefined, { unit: 1.2 });
+    this.box(R.x1 - k / 2, kh / 2 - 0.02, cz, k, kh, d - 2 * k, M.stone, undefined, { unit: 1.2 });
+    for (const [x, z] of [[R.x0, R.z0], [R.x1, R.z0], [R.x0, R.z1], [R.x1, R.z1]]) {
+      this.kit.add(G.ico(0.17, 1), M.moss, { x: x + Math.sign(cx - x) * 0.12, y: kh - 0.03, z: z + Math.sign(cz - z) * 0.12 }, [0, 0, 0], [1.4, 0.35, 1.4]);
+    }
+    // two flat stepping stones lead in from the path on the west side
+    for (const [x, s] of [[R.x0 - 0.35, 0.34], [R.x0 - 0.95, 0.3]] as const) this.kit.add(G.cyl(s, s + 0.02, 0.06, 12), M.stoneDark, { x, y: 0.02, z: COURT.cz }, [0, x, 0], [1, 1, 0.8]);
+    // the floor Kettle stands on before and after a round
+    this.collBox(cx, COURT.y / 2, cz, w, COURT.y, d, 'stone');
+    this.clear(R.x0 - 0.2, R.z0 - 0.2, R.x1 + 0.2, R.z1 + 0.2);
   }
 
   private buildSpirit() {
@@ -803,7 +836,14 @@ export class Level {
     this.kit.add(boxUV(G.box(1.0, 1.75, 0.1), 1.0, 1.75, 0.1, 1), M.plankDark, { x: mx - 0.8, y: 0.61 + 0.875, z: mz + md / 2 + 0.03 });
     this.kit.add(G.box(1.2, 0.1, 0.14), M.woodDark, { x: mx - 0.8, y: 0.61 + 1.8, z: mz + md / 2 + 0.05 });
     this.box(mx - 0.8, 0.3, mz + md / 2 + 0.35, 1.3, 0.6, 0.5, M.stoneDark, 'stone', { unit: 0.8 });
-    this.kit.add(G.box(0.06, 0.7, 0.7), M.glassDark, { x: mx - mw / 2 - 0.02, y: 2.2, z: mz - 1.3 });
+    for (const wz of [mz - 1.3, mz + 0.9]) {
+      this.kit.add(G.box(0.06, 0.7, 0.7), M.glassDark, { x: mx - mw / 2 - 0.02, y: 2.2, z: wz });
+      this.kit.add(G.box(0.08, 0.06, 0.82), M.woodDark, { x: mx - mw / 2 - 0.03, y: 1.83, z: wz });
+      // the warm light behind the glass, dark until the mill wakes
+      const lit = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), new THREE.MeshBasicMaterial({ color: '#FFD9A0', transparent: true, opacity: 0, fog: false }));
+      lit.position.set(mx - mw / 2 - 0.056, 2.2, wz); lit.rotation.y = -Math.PI / 2;
+      this.group.add(lit); this.millWindows.push(lit);
+    }
     this.kit.add(G.cyl(0.1, 0.1, 2.0, 8), M.woodDark, { x: 13.4, y: 0.55, z: -19.2 }, [0, 0, Math.PI / 2]);
     for (const s of [-1, 1]) this.kit.add(G.box(0.06, 2.6, 0.06), M.wood, { x: mx + mw / 2 + 0.25, y: 1.25, z: mz + 1.4 + s * 0.22 }, [0, 0, -0.18]);
     for (let i = 0; i < 7; i++) this.kit.add(G.box(0.04, 0.04, 0.44), M.wood, { x: mx + mw / 2 + 0.47 - i * 0.055, y: 0.2 + i * 0.36, z: mz + 1.4 });
@@ -832,7 +872,7 @@ export class Level {
     this.kit.add(G.sph(0.16, 10, 6), M.straw, { x: basket.x, y: basket.y, z: basket.z }, [0, 0, 0], [1, 0.7, 1]);
     for (let i = 0; i < 6; i++) this.kit.add(G.ico(0.05, 0), pmat(i % 2 ? PAL.poppy : PAL.daisy), { x: basket.x + Math.cos(i) * 0.12, y: basket.y + 0.1, z: basket.z + Math.sin(i) * 0.12 });
     // a stone lantern on the river path
-    const sl = new THREE.Vector3(7.6, 0, -14.6);
+    const sl = new THREE.Vector3(COURT_RECT.x0 - 0.45, 0, COURT_RECT.z1 - 0.35);
     this.kit.add(G.cyl(0.3, 0.32, 0.2, 6), M.stoneDark, { x: sl.x, y: 0.1, z: sl.z });
     this.kit.add(G.cyl(0.1, 0.12, 0.7, 6), M.stoneDark, { x: sl.x, y: 0.55, z: sl.z });
     this.kit.add(G.box(0.36, 0.3, 0.36), M.stoneDark, { x: sl.x, y: 1.05, z: sl.z });
@@ -918,9 +958,9 @@ export class Level {
     const bushes: [number, number, number, number, string?][] = [
       [-8.6, Y, 6.4, 1.1, PAL.hollyhock], [-9.0, Y, -1.0, 0.9], [-9.0, Y, -6.5, 1.0, PAL.daisy], [0.8, Y, 6.6, 0.9], [3.6, Y, 6.8, 0.8, PAL.hollyhock],
       [8.3, Y, -1.8, 0.9, PAL.daisy], [8.2, Y, 1.6, 0.8], [-3.6, Y, -8.6, 0.8, PAL.poppy], [3.6, Y, -8.7, 0.75],
-      [-2.0, 0, -11.0, 0.9, PAL.lavender], [2.8, 0, -11.2, 0.9], [-5.0, 0, -11.0, 1.0, PAL.daisy], [6.0, 0, -11.0, 0.9, PAL.hollyhock],
+      [-2.0, 0, -11.0, 0.9, PAL.lavender], [-5.0, 0, -11.0, 1.0, PAL.daisy], [9.0, 0, -17.6, 0.7, PAL.hollyhock],
       [-9.0, 0, -18.0, 1.0], [-2.0, 0, -26.2, 1.0, PAL.poppy], [3.0, 0, -26.4, 1.1], [8.4, 0, -26.0, 0.9, PAL.lavender],
-      [-6.0, 0, -12.2, 0.8], [8.6, 0, -11.5, 0.7], [15.0, 0, -9.2, 0.9, PAL.daisy], [20.2, 0, -16.0, 1.0], [14.8, 0, -26.4, 0.9, PAL.hollyhock],
+      [-6.0, 0, -12.2, 0.8], [15.0, 0, -9.2, 0.9, PAL.daisy], [20.2, 0, -16.0, 1.0], [14.8, 0, -26.4, 0.9, PAL.hollyhock],
       [-7.0, Y, 4.4, 0.7, PAL.lavender], [4.6, Y, 2.2, 0.6, PAL.buttercup],
     ];
     for (const [x, y, z, s, f] of bushes) { F.bush(x, y, z, s, f); this.clear(x - 0.45 * s, z - 0.45 * s, x + 0.45 * s, z + 0.45 * s); }
@@ -960,7 +1000,7 @@ export class Level {
   }
 
   // ---------- dynamic things ----------
-  addPot(x: number, y: number, z: number, seed: number | null) {
+  addPot(x: number, y: number, z: number) {
     const M = this.M;
     const mesh = new THREE.Group();
     mesh.add(new THREE.Mesh(G.cyl(0.15, 0.2, 0.44, 16), M.clay));
@@ -970,9 +1010,7 @@ export class Level {
     this.group.add(mesh);
     const rb = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x, y, z).setLinearDamping(0.2).setAngularDamping(0.4));
     this.world.createCollider(RAPIER.ColliderDesc.cylinder(0.22, 0.19).setDensity(0.6).setFriction(0.7).setRestitution(0.1), rb);
-    let seedIndex: number | null = null;
-    if (seed !== null) { this.seeds.unshift(new THREE.Vector3(x, y, z)); seedIndex = 0; }
-    this.pots.push({ body: rb, mesh, seed: seedIndex, spawn: new THREE.Vector3(x, y, z), prevV: new THREE.Vector3(), broken: false });
+    this.pots.push({ body: rb, mesh, spawn: new THREE.Vector3(x, y, z), prevV: new THREE.Vector3(), broken: false });
   }
 
   addCrate(x: number, y: number, z: number) {

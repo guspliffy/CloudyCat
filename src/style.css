@@ -15,13 +15,16 @@ body { font-family: var(--body); color: var(--ink); touch-action: none; user-sel
 /* Coach line: brush-like text placed in the world next to the thing it is about */
 #coach {
   position: fixed; left: 0; top: 0; transform: translate(-50%, -100%);
-  display: flex; gap: 8px; align-items: center; pointer-events: none;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 8px; align-items: center; pointer-events: none;
+  width: max-content; max-width: calc(100vw - 24px); text-align: center;
   opacity: 0; transition: opacity 0.5s;
   font-family: var(--display); font-weight: 700; font-size: clamp(1.05rem, 2.4vw, 1.4rem);
   text-shadow: 0 1px 10px rgba(40, 28, 50, 0.65), 0 0 2px rgba(40, 28, 50, 0.5);
   white-space: nowrap;
 }
 #coach.show { opacity: 1; }
+/* a long line on a narrow phone wraps instead of running off the screen */
+#coach .line { white-space: normal; }
 #coach .key {
   font-family: var(--body); font-size: 0.8rem; font-weight: 700; padding: 2px 8px; border-radius: 6px;
   background: rgba(247, 239, 224, 0.92); color: #2a2438; text-shadow: none;
@@ -40,6 +43,7 @@ body { font-family: var(--body); color: var(--ink); touch-action: none; user-sel
 #hud .lamps i { width: 13px; height: 13px; border-radius: 50%; background: rgba(138, 148, 168, 0.75); box-shadow: inset 0 0 0 2px rgba(247, 239, 224, 0.7); transition: background 0.6s, box-shadow 0.6s; }
 #hud .lamps i.lit { background: radial-gradient(circle at 40% 35%, #ffe7b0, #f2b55a 55%, #c97a22); box-shadow: 0 0 10px #f2b55a, inset 0 0 0 2px rgba(255, 240, 210, 0.8); }
 #hud .lamps i.next { animation: pulse 1.6s ease-in-out infinite; }
+#hud .count { font-family: var(--body); font-size: 0.85rem; color: var(--ink-dim); margin-left: 4px; }
 @keyframes pulse { 50% { box-shadow: 0 0 8px #f2b55a, inset 0 0 0 2px rgba(255, 220, 160, 0.95); } }
 
 #map {
@@ -72,6 +76,7 @@ body { font-family: var(--body); color: var(--ink); touch-action: none; user-sel
 #btn-jump { width: 84px; height: 84px; right: calc(env(safe-area-inset-right, 0px) + 22px); bottom: calc(env(safe-area-inset-bottom, 0px) + 34px); }
 #btn-paw { width: 66px; height: 66px; right: calc(env(safe-area-inset-right, 0px) + 120px); bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); }
 #touch button.down { background: var(--amber); }
+body.on-court #touch button { display: none; }
 
 #start {
   position: fixed; inset: 0; display: grid; place-items: center;
@@ -97,3 +102,43 @@ body { font-family: var(--body); color: var(--ink); touch-action: none; user-sel
 #dev input { width: 100%; }
 @media (prefers-reduced-motion: reduce) { #coach, #banner, #start { transition: none; } }
 @media (max-width: 700px), (max-height: 500px) { #banner { top: max(22%, calc(env(safe-area-inset-top, 0px) + 124px)); } }
+
+/* The court: three quiet buttons at the bottom while on the stones, and the result card after a win */
+#courtbar {
+  position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); transform: translateX(-50%);
+  display: flex; gap: 10px; pointer-events: auto; width: max-content; white-space: nowrap;
+}
+#courtbar button {
+  display: flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; padding: 8px 14px;
+  font: 700 0.9rem var(--body); color: var(--ink); background: var(--glass); cursor: pointer;
+  box-shadow: 0 3px 12px rgba(40, 28, 50, 0.22); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+#courtbar button:hover { background: rgba(34, 30, 51, 0.55); }
+#courtbar button:active { transform: translateY(1px); }
+#courtbar kbd { font: 700 0.72rem var(--body); padding: 1px 6px; border-radius: 5px; background: rgba(247, 239, 224, 0.9); color: #2a2438; }
+@media (pointer: coarse) { #courtbar kbd { display: none; } #courtbar button { padding: 11px 16px; } }
+
+#result {
+  position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); transform: translateX(-50%);
+  min-width: min(320px, 90vw); padding: 16px 20px 18px; border-radius: 22px; text-align: center;
+  background: rgba(34, 30, 51, 0.5); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 30px rgba(40, 28, 50, 0.35); animation: rise 0.5s ease-out;
+}
+@keyframes rise { from { opacity: 0; transform: translate(-50%, 14px); } }
+#result .stars { display: flex; justify-content: center; gap: 12px; }
+#result .stars i {
+  width: 26px; height: 32px; display: block; border-radius: 50% 50% 46% 46% / 62% 62% 38% 38%;
+  background: rgba(138, 148, 168, 0.6); box-shadow: inset 0 0 0 2px rgba(247, 239, 224, 0.55);
+}
+#result .stars i.lit { background: radial-gradient(circle at 45% 60%, #fff3d0, #ffc46b 55%, #d9822b); box-shadow: 0 0 14px #f2b55a, inset 0 0 0 2px rgba(255, 240, 210, 0.85); animation: glow 0.6s ease-out backwards; }
+#result .stars i.lit:nth-child(2) { animation-delay: 0.15s; }
+#result .stars i.lit:nth-child(3) { animation-delay: 0.3s; }
+@keyframes glow { from { transform: scale(0.4); opacity: 0; } }
+#result .route { margin: 10px 0 14px; font-family: var(--display); font-size: 1.05rem; }
+#result .actions { display: flex; gap: 10px; justify-content: center; }
+#result button {
+  border: 0; border-radius: 999px; padding: 0.6rem 1.2rem; font: 700 0.95rem var(--body); cursor: pointer;
+  background: rgba(247, 239, 224, 0.18); color: var(--ink); box-shadow: inset 0 0 0 1.5px rgba(247, 239, 224, 0.55);
+}
+#result button.primary { background: var(--ink); color: #2a2438; box-shadow: none; }
+#result button:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
