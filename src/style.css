@@ -29,19 +29,31 @@ body { font-family: var(--body); color: var(--ink); touch-action: none; user-sel
 #coach .key:empty { display: none; }
 
 #hud {
-  position: fixed; top: calc(env(safe-area-inset-top, 0px) + 16px); left: max(16px, env(safe-area-inset-left, 0px));
-  display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.05rem;
+  position: fixed; top: calc(env(safe-area-inset-top, 0px) + 16px); left: calc(env(safe-area-inset-left, 0px) + 16px);
+  /* leave room for the map on the right; on a narrow phone the goal wraps instead of running under it */
+  max-width: calc(100vw - 150px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); line-height: 1.2;
+  pointer-events: none; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.05rem;
   color: var(--amber); text-shadow: 0 1px 6px rgba(40, 28, 50, 0.6);
 }
 #hud { transition: opacity 0.8s; color: var(--ink); font-family: var(--display); font-size: 1rem; }
-#hud .lamps { display: flex; gap: 6px; }
+#hud .lamps { display: flex; gap: 6px; flex: none; }
 #hud .lamps i { width: 13px; height: 13px; border-radius: 50%; background: rgba(138, 148, 168, 0.75); box-shadow: inset 0 0 0 2px rgba(247, 239, 224, 0.7); transition: background 0.6s, box-shadow 0.6s; }
 #hud .lamps i.lit { background: radial-gradient(circle at 40% 35%, #ffe7b0, #f2b55a 55%, #c97a22); box-shadow: 0 0 10px #f2b55a, inset 0 0 0 2px rgba(255, 240, 210, 0.8); }
 #hud .lamps i.next { animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { box-shadow: 0 0 8px #f2b55a, inset 0 0 0 2px rgba(255, 220, 160, 0.95); } }
 
+#map {
+  position: fixed; top: calc(env(safe-area-inset-top, 0px) + 14px); right: calc(env(safe-area-inset-right, 0px) + 14px);
+  width: 136px; height: 136px; border-radius: 50%; pointer-events: none;
+  box-shadow: 0 3px 14px rgba(40, 28, 50, 0.35); opacity: 0.94; transition: opacity 0.8s;
+}
+@media (max-width: 700px), (max-height: 500px) {
+  #map { width: 96px; height: 96px; }
+}
+
 #banner {
-  position: fixed; left: 50%; top: 22%; transform: translateX(-50%);
+  /* below the map, so a long line never runs into it */
+  position: fixed; left: 50%; top: max(22%, calc(env(safe-area-inset-top, 0px) + 166px)); transform: translateX(-50%);
   font-family: var(--display); font-size: clamp(1.4rem, 4vw, 2.2rem); text-align: center; width: max-content; max-width: 90vw; text-wrap: balance;
   text-shadow: 0 2px 14px rgba(40, 28, 50, 0.85), 0 0 3px rgba(40, 28, 50, 0.6); pointer-events: none; transition: opacity 1s;
 }
@@ -57,8 +69,8 @@ body { font-family: var(--body); color: var(--ink); touch-action: none; user-sel
   position: fixed; pointer-events: auto; border: 0; border-radius: 50%; font: 700 0.95rem var(--body);
   color: #2a2438; background: rgba(247, 239, 224, 0.82); box-shadow: 0 4px 14px rgba(40, 28, 50, 0.3);
 }
-#btn-jump { width: 84px; height: 84px; right: max(22px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 34px); }
-#btn-paw { width: 66px; height: 66px; right: calc(max(22px, env(safe-area-inset-right, 0px)) + 98px); bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); }
+#btn-jump { width: 84px; height: 84px; right: calc(env(safe-area-inset-right, 0px) + 22px); bottom: calc(env(safe-area-inset-bottom, 0px) + 34px); }
+#btn-paw { width: 66px; height: 66px; right: calc(env(safe-area-inset-right, 0px) + 120px); bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); }
 #touch button.down { background: var(--amber); }
 
 #start {
@@ -84,3 +96,4 @@ body { font-family: var(--body); color: var(--ink); touch-action: none; user-sel
 #dev label { display: grid; grid-template-columns: 1fr 70px 38px; gap: 4px; align-items: center; margin: 2px 0; }
 #dev input { width: 100%; }
 @media (prefers-reduced-motion: reduce) { #coach, #banner, #start { transition: none; } }
+@media (max-width: 700px), (max-height: 500px) { #banner { top: max(22%, calc(env(safe-area-inset-top, 0px) + 124px)); } }

@@ -11,6 +11,7 @@ export class Ambient {
   private butterflies: { o: THREE.Group; wings: THREE.Mesh[]; c: THREE.Vector3; r: number; ph: number; sp: number }[] = [];
   private chimney: SmokeRenderer;
   private chimPuffs: (PuffSlot & { age: number; life: number })[] = [];
+  private chimFree: (PuffSlot & { age: number; life: number })[] = [];
   private chimAcc = 0;
   private v = new THREE.Vector3();
   private seeds: { o: THREE.Mesh; p: THREE.Vector3; ph: number }[] = [];
@@ -110,12 +111,15 @@ export class Ambient {
     while (this.chimAcc > 1) {
       this.chimAcc -= 1;
       if (this.chimPuffs.length > 60) break;
-      this.chimPuffs.push({ pos: this.chimneyAt.clone(), vel: new THREE.Vector3(0, 0.5, 0), size: 0.12, alpha: 0, seed: Math.random(), erode: 0.4, light: 0.3, stretch: 0.05, age: 0, life: 4 + Math.random() * 2 });
+      // puffs are reused from a small pool, so the chimney makes no garbage
+      const p = this.chimFree.pop() ?? { pos: new THREE.Vector3(), vel: new THREE.Vector3(), size: 0, alpha: 0, seed: 0, erode: 0, light: 0.3, stretch: 0.05, age: 0, life: 0 };
+      p.pos.copy(this.chimneyAt); p.vel.set(0, 0.5, 0); p.size = 0.12; p.alpha = 0; p.seed = Math.random(); p.erode = 0.4; p.age = 0; p.life = 4 + Math.random() * 2;
+      this.chimPuffs.push(p);
     }
     for (let i = this.chimPuffs.length - 1; i >= 0; i--) {
       const p = this.chimPuffs[i];
       p.age += dt; const k = p.age / p.life;
-      if (k >= 1) { this.chimPuffs.splice(i, 1); continue; }
+      if (k >= 1) { this.chimFree.push(p); this.chimPuffs[i] = this.chimPuffs[this.chimPuffs.length - 1]; this.chimPuffs.pop(); continue; }
       swirl(this.v, p.pos.x * 1.5, p.pos.y * 1.5, p.pos.z * 1.5, t * 0.6 + p.seed * 5);
       p.vel.addScaledVector(this.v, dt * 0.25);
       p.vel.x += WIND.dir.x * (0.4 + WIND.gust) * dt * 0.6; p.vel.z += WIND.dir.y * (0.4 + WIND.gust) * dt * 0.6;

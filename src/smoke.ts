@@ -21,12 +21,15 @@ export const SMOKE_COLORS = {
   rim: new THREE.Color('#FFD9A0'),
 };
 
+const ATTRS = ['iPos', 'iVel', 'iData', 'iLook'];
+
 export class SmokeRenderer {
   mesh: THREE.Mesh;
   private geo: THREE.InstancedBufferGeometry;
   private aPos: Float32Array; private aVel: Float32Array; private aData: Float32Array; private aLook: Float32Array;
   private order: number[] = [];
   private depth: Float32Array;
+  private byDepth = (a: number, b: number) => this.depth[a] - this.depth[b];
   material: THREE.ShaderMaterial;
 
   constructor(private max: number) {
@@ -125,8 +128,7 @@ export class SmokeRenderer {
       this.depth[i] = vm[2] * p.x + vm[6] * p.y + vm[10] * p.z + vm[14];
       this.order[i] = i;
     }
-    const d = this.depth;
-    this.order.sort((a, b) => d[a] - d[b]);
+    this.order.sort(this.byDepth);
     for (let k = 0; k < n; k++) {
       const s = slots[this.order[k]];
       this.aPos[k * 3] = s.pos.x; this.aPos[k * 3 + 1] = s.pos.y; this.aPos[k * 3 + 2] = s.pos.z;
@@ -135,7 +137,7 @@ export class SmokeRenderer {
       this.aLook[k * 2] = s.light; this.aLook[k * 2 + 1] = 1;
     }
     this.geo.instanceCount = n;
-    for (const name of ['iPos', 'iVel', 'iData', 'iLook']) (this.geo.getAttribute(name) as THREE.InstancedBufferAttribute).needsUpdate = true;
+    for (const name of ATTRS) (this.geo.getAttribute(name) as THREE.InstancedBufferAttribute).needsUpdate = true;
     this.material.uniforms.uTime.value = time;
   }
 

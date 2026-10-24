@@ -62,7 +62,7 @@ export class Level {
   surfaces = new Map<number, Surface>();
   camBlock = new Set<number>();
   pots: Pot[] = [];
-  crates: { body: RAPIER.RigidBody; mesh: THREE.Object3D }[] = [];
+  crates: { body: RAPIER.RigidBody; mesh: THREE.Object3D; spawn: THREE.Vector3 }[] = [];
   seeds: THREE.Vector3[] = [];
   spirit = new THREE.Vector3(2, 0.45, -18.5);
   wheel!: THREE.Group;
@@ -985,7 +985,7 @@ export class Level {
     const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x, y, z).setLinearDamping(0.6).setAngularDamping(0.8));
     const col = this.world.createCollider(RAPIER.ColliderDesc.cuboid(0.3, 0.3, 0.3).setDensity(0.5).setFriction(0.8), body);
     this.surfaces.set(col.handle, 'wood');
-    this.crates.push({ body, mesh });
+    this.crates.push({ body, mesh, spawn: new THREE.Vector3(x, y, z) });
   }
 
   openGate() {
@@ -1011,7 +1011,15 @@ export class Level {
       p.mesh.position.set(tr.x, tr.y, tr.z); p.mesh.quaternion.set(r.x, r.y, r.z, r.w);
     }
     for (const c of this.crates) {
-      const tr = c.body.translation(), r = c.body.rotation();
+      let tr = c.body.translation();
+      // a crate pushed into the river or off the edge comes quietly back, so no step is ever lost
+      if (tr.y < -0.5) {
+        c.body.setTranslation({ x: c.spawn.x, y: c.spawn.y + 0.4, z: c.spawn.z }, true);
+        c.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+        c.body.setLinvel({ x: 0, y: 0, z: 0 }, true); c.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        tr = c.body.translation();
+      }
+      const r = c.body.rotation();
       c.mesh.position.set(tr.x, tr.y, tr.z); c.mesh.quaternion.set(r.x, r.y, r.z, r.w);
     }
   }

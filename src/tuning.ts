@@ -38,8 +38,8 @@ export const T = {
   camPitch: 0.34,
   camHeight: 0.5,
   camLag: 6,
-  camAutoYaw: 1.1,
-  camIdleBeforeAuto: 1.6,
+  camAutoYaw: 2.4,
+  camDragGrace: 0.35,
   camDragSpeed: 0.006,
 };
 export type Tuning = typeof T;

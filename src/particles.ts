@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+const _v = new THREE.Vector3();
 
 // Soft round particles: cloud wisps, petals, firefly sparks.
 const MAX = 600;
@@ -44,8 +45,10 @@ export class Particles {
 
   emit(p: THREE.Vector3, v: THREE.Vector3, size: number, life: number, color: THREE.Color, alpha: number, grow = 1, drag = 1.5) {
     const i = this.next; this.next = (this.next + 1) % MAX;
-    this.pos.set([p.x, p.y, p.z], i * 3); this.vel.set([v.x, v.y, v.z], i * 3);
-    this.col.set([color.r, color.g, color.b, alpha], i * 4);
+    const i3 = i * 3, i4 = i * 4;
+    this.pos[i3] = p.x; this.pos[i3 + 1] = p.y; this.pos[i3 + 2] = p.z;
+    this.vel[i3] = v.x; this.vel[i3 + 1] = v.y; this.vel[i3 + 2] = v.z;
+    this.col[i4] = color.r; this.col[i4 + 1] = color.g; this.col[i4 + 2] = color.b; this.col[i4 + 3] = alpha;
     this.size[i] = size; this.life[i] = life; this.maxLife[i] = life; this.grow[i] = grow; this.drag[i] = drag; this.alpha0[i] = alpha;
   }
 
@@ -53,7 +56,7 @@ export class Particles {
   burst(p: THREE.Vector3, n: number, speed: number, size: number, color: THREE.Color, alpha: number, up = 0.4) {
     for (let k = 0; k < n; k++) {
       const a = (k / n) * Math.PI * 2 + Math.random() * 0.3;
-      this.emit(p, new THREE.Vector3(Math.cos(a) * speed, up * speed * (0.5 + Math.random()), Math.sin(a) * speed), size * (0.8 + Math.random() * 0.4), 0.7 + Math.random() * 0.4, color, alpha, 1.6, 3);
+      this.emit(p, _v.set(Math.cos(a) * speed, up * speed * (0.5 + Math.random()), Math.sin(a) * speed), size * (0.8 + Math.random() * 0.4), 0.7 + Math.random() * 0.4, color, alpha, 1.6, 3);
     }
   }
 

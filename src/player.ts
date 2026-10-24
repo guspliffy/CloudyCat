@@ -3,6 +3,11 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { T } from './tuning';
 import type { Input } from './input';
 
+// scratch values reused every physics step, so walking makes no garbage
+const _fwd = new THREE.Vector3(), _right = new THREE.Vector3(), _hv = new THREE.Vector3(), _diff = new THREE.Vector3(), _float = new THREE.Vector3();
+const _desired = new RAPIER.Vector3(0, 0, 0), _next = new RAPIER.Vector3(0, 0, 0);
+const _ray = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
+
 // Kinematic character: smooth acceleration, coyote time, jump buffer, a floaty apex, a double jump puff.
 // Falls never hurt: off an edge or into the river, Moth puffs into a cloud and drifts back.
 export const RADIUS = 0.24;
@@ -54,6 +59,8 @@ export class Player {
     this.lastSafe.copy(start);
   }
 
+  private passFilter = (c: RAPIER.Collider) => !(this.thinning && c.handle === this.gateHandle);
+
   update(dt: number, input: Input, camYaw: number) {
     this.events.length = 0;
     this.jumpedThisFrame = false;
@@ -63,8 +70,8 @@ export class Player {
     if (this.floating) { this.updateFloat(dt); return; }
 
     // movement relative to the camera
-    const fwd = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
-    const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+    const fwd = _fwd.set(-Math.sin(camYaw), 0, -Math.cos(camYaw));
+    const right = _right.set(-fwd.z, 0, fwd.x);
     const wish = right.multiplyScalar(input.moveX).add(fwd.multiplyScalar(input.moveY));
     const mag = Math.min(1, wish.length());
     if (mag > 0.001) wish.normalize();
@@ -73,9 +80,9 @@ export class Player {
       : THREE.MathUtils.lerp(T.trotSpeed, T.runSpeed, (mag - 0.75) / 0.25);
     const thinMul = this.thinning ? T.thinSpeedMul : 1;
     const target = wish.multiplyScalar(speedTarget * thinMul);
-    const hv = new THREE.Vector3(this.vel.x, 0, this.vel.z);
+    const hv = _hv.set(this.vel.x, 0, this.vel.z);
     const accel = this.grounded ? (mag > 0.01 ? T.accel : T.decel) : T.airAccel;
-    const diff = target.clone().sub(hv);
+    const diff = _diff.copy(target).sub(hv);
     const maxStep = accel * dt;
     if (diff.length() > maxStep) diff.setLength(maxStep);
     hv.add(diff);
@@ -119,14 +126,13 @@ export class Player {
     this.thin01 = THREE.MathUtils.damp(this.thin01, this.thinning ? 1 : 0, 8, dt);
 
     // move through the world
-    const desired = new RAPIER.Vector3(this.vel.x * dt, this.vel.y * dt, this.vel.z * dt);
-    this.ctrl.computeColliderMovement(this.collider, desired, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined,
-      (c) => !(this.thinning && c.handle === this.gateHandle));
+    const desired = _desired; desired.x = this.vel.x * dt; desired.y = this.vel.y * dt; desired.z = this.vel.z * dt;
+    this.ctrl.computeColliderMovement(this.collider, desired, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, this.passFilter);
     const mv = this.ctrl.computedMovement();
     const wasGrounded = this.grounded;
     this.grounded = this.ctrl.computedGrounded();
     const t = this.body.translation();
-    const next = new RAPIER.Vector3(t.x + mv.x, t.y + mv.y, t.z + mv.z);
+    const next = _next; next.x = t.x + mv.x; next.y = t.y + mv.y; next.z = t.z + mv.z;
     this.body.setNextKinematicTranslation(next);
     // velocity that actually happened (so walls stop us and ceilings cut jumps)
     if (dt > 0) {
@@ -163,9 +169,10 @@ export class Player {
     // only static ground counts, and only if there is ground a little in every direction
     const body = this.groundHandle >= 0 ? this.world.getCollider(this.groundHandle)?.parent() : null;
     if (body && !body.isFixed()) return false;
-    for (const [dx, dz] of [[0.35, 0], [-0.35, 0], [0, 0.35], [0, -0.35]]) {
-      const hit = this.world.castRay(new RAPIER.Ray({ x: this.pos.x + dx, y: this.pos.y + 0.3, z: this.pos.z + dz }, { x: 0, y: -1, z: 0 }), 0.6, true,
-        undefined, undefined, this.collider);
+    for (let i = 0; i < 4; i++) {
+      const dx = i === 0 ? 0.35 : i === 1 ? -0.35 : 0, dz = i === 2 ? 0.35 : i === 3 ? -0.35 : 0;
+      _ray.origin.x = this.pos.x + dx; _ray.origin.y = this.pos.y + 0.3; _ray.origin.z = this.pos.z + dz;
+      const hit = this.world.castRay(_ray, 0.6, true, undefined, undefined, this.collider);
       if (!hit) return false;
     }
     return !this.inWater(this.pos);
@@ -201,7 +208,7 @@ export class Player {
     this.floatT += dt / T.floatBackTime;
     const k = Math.min(1, this.floatT);
     const e = k * k * (3 - 2 * k);
-    const p = this.floatFrom.clone().lerp(this.lastSafe, e);
+    const p = _float.copy(this.floatFrom).lerp(this.lastSafe, e);
     p.y += Math.sin(k * Math.PI) * 2.2 + (1 - e) * 0.6;
     this.float01 = k < 0.85 ? Math.min(1, k * 5) : Math.max(0, 1 - (k - 0.85) / 0.15);
     this.pos.copy(p);

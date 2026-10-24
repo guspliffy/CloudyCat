@@ -220,6 +220,9 @@ export class Spirit {
   private feet: THREE.Group[] = [];
   private mittens: THREE.Group[] = [];
   private mittenOff = [new THREE.Vector3(), new THREE.Vector3()];
+  private mittenRest: THREE.Vector3[] = [];
+  private carryInBody = new THREE.Vector3();
+  private headInBody = new THREE.Vector3();
   private mittenVel = [new THREE.Vector3(), new THREE.Vector3()];
   private crown = new THREE.Object3D();
   private carryLocal = new THREE.Object3D();
@@ -347,11 +350,13 @@ export class Spirit {
       const r = d.mittenR;
       this.ellipsoid(g, [0, 0, 0], [0, 0, 0], [r, r * 0.94, r], this.mat, 18);
       this.mittenOff[this.mittens.length].set(...sub(m, B));
+      this.mittenRest.push(new THREE.Vector3(...sub(m, B)));
       this.mittens.push(g);
     }
     // wake points on the lower back: where the trail peels off when running
     for (const s of [-1, 1]) { const o = new THREE.Object3D(); o.position.set(...sub([s * 0.06, Math.max(0.12, B[1] - 0.03), -0.14], B)); this.body.add(o); this.wakePts.push(o); }
     this.carryLocal.position.set(...sub(d.carry, B)); this.body.add(this.carryLocal);
+    this.carryInBody.set(...sub(d.carry, B)); this.headInBody.set(...sub(d.headC, B));
 
     // head: a smooth dome of a face, a little puff smoke on the back and top only
     this.head.position.set(...sub(H, B));
@@ -542,7 +547,8 @@ export class Spirit {
     this.gait += dt * Math.PI * 2 * (2.4 + speed01 * 1.2) * (moving ? 1 : 0);
     const amp = grounded ? Math.min(1, speed01 * 1.8) : 0;
     const settle = THREE.MathUtils.smoothstep(this.idle, 4, 5.5);
-    this.feet.forEach((f, i) => {
+    for (let i = 0; i < this.feet.length; i++) {
+      const f = this.feet[i];
       const ph = this.gait + i * Math.PI;
       const lift = Math.max(0, Math.sin(ph)) * 0.025 * amp + (grounded ? 0 : 0.012);
       const F = this.d.feet[i];
@@ -550,7 +556,7 @@ export class Spirit {
       f.rotation.x = grounded ? -Math.sin(ph) * 0.3 * amp : -0.35;
       // a little smoke where a foot comes down
       if (amp > 0.25 && Math.sin(this.lastGait + i * Math.PI) > 0 && Math.sin(ph) <= 0) this.footPuff(f);
-    });
+    }
     const roll = Math.sin(this.gait) * 0.07 * amp;
     const B = this.d.bodyC, hov = this.d.hover;
     // floaters bob gently on their cushion of air; walkers bob with each step
@@ -569,21 +575,22 @@ export class Spirit {
     this.head.rotation.set(Math.sin(t * 0.5) * 0.03 + bap * 0.18 + settle * 0.06, this.glance * 0.5, -roll * 0.35 + Math.sin(t * 0.37) * 0.04 + tilt * (1 - amp));
 
     // mittens: swing with the steps, reach forward on bap, hug the ember; a soft spring makes them flap
-    this.mittens.forEach((m, i) => {
+    // (rest, carry and cheek spots are body-space points worked out once in the constructor)
+    for (let i = 0; i < this.mittens.length; i++) {
+      const m = this.mittens[i];
       const side = i === 0 ? 1 : -1;
-      const rest = sub(this.d.mittens[i], B);
-      const goal = this.v1.set(rest[0], rest[1], rest[2]);
-      if (this.carrying) goal.set(...sub(this.d.carry, B)).add(this.v2.set(side * 0.055, 0.01, -0.02));
+      const goal = this.v1.copy(this.mittenRest[i]);
+      if (this.carrying) goal.copy(this.carryInBody).add(this.v2.set(side * 0.055, 0.01, -0.02));
       goal.z += Math.sin(this.gait + i * Math.PI) * 0.02 * amp;
       goal.y += grounded ? 0 : 0.025;
-      if (bap > 0) goal.lerp(this.v2.set(...sub(this.d.carry, B)).add(this.v3.set(side * 0.075, 0, 0.07 * bap - 0.03)), bap);
+      if (bap > 0) goal.lerp(this.v2.copy(this.carryInBody).add(this.v3.set(side * 0.075, 0, 0.07 * bap - 0.03)), bap);
       // cheek touch during a long glance
-      if (!this.carrying && this.idle > 1.5 && side * this.glanceGoal < -0.25) goal.lerp(this.v2.set(...sub(this.d.headC, B)).add(this.v3.set(side * 0.1, -0.05, 0.09)), 0.6);
+      if (!this.carrying && this.idle > 1.5 && side * this.glanceGoal < -0.25) goal.lerp(this.v2.copy(this.headInBody).add(this.v3.set(side * 0.1, -0.05, 0.09)), 0.6);
       const o = this.mittenOff[i], v = this.mittenVel[i];
       v.addScaledVector(this.v2.copy(goal).sub(o), 180 * dt).multiplyScalar(Math.exp(-14 * dt));
       o.addScaledVector(v, dt);
       m.position.copy(o);
-    });
+    }
 
     // eyes: blink, sleepy after settling, happy squeeze on bap and delivery
     this.nextBlink -= dt;

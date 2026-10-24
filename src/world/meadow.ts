@@ -108,10 +108,10 @@ export class Meadow {
       // heads are drawn in metres across but in stem lengths up (an average stem is 0.35 m)
       new THREE.IcosahedronGeometry(0.045, 0).scale(1, 0.45 / 0.35, 1).translate(0, 1.0, 0),
       new THREE.IcosahedronGeometry(0.018, 0).scale(1, 1 / 0.35, 1).translate(0, 1.06, 0),
-    ].map((g) => g.toNonIndexed()))!;
+    ].map((g) => (g.index ? g.toNonIndexed() : g)))!;
     // the flower centre: a warm dot
     const hc = new Float32Array(headG.getAttribute('position').count * 3);
-    const n0 = new THREE.IcosahedronGeometry(0.045, 0).toNonIndexed().getAttribute('position').count;
+    const n0 = new THREE.IcosahedronGeometry(0.045, 0).getAttribute('position').count;
     for (let i = 0; i < hc.length / 3; i++) { const centre = i >= n0; hc[i * 3] = 1; hc[i * 3 + 1] = centre ? 0.8 : 1; hc[i * 3 + 2] = centre ? 0.35 : 1; }
     headG.setAttribute('color', new THREE.BufferAttribute(hc, 3));
     const stemMat = windMaterial(new THREE.MeshLambertMaterial({ color: PAL.grassMid }), 1.4);

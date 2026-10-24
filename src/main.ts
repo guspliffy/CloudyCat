@@ -7,6 +7,7 @@ import { Spirit, PALETTE, DesignId } from './spirit';
 import { Level, glowTexture, heightAt } from './level';
 import { Player } from './player';
 import { FollowCamera } from './camera';
+import { Minimap } from './minimap';
 import * as zcheck from './dev/zcheck';
 import { Particles } from './particles';
 import { Sky } from './world/sky';
@@ -25,7 +26,11 @@ async function main() {
   const touch = matchMedia('(pointer: coarse)').matches;
   const phone = touch || params.has('phone');
   const renderer = new THREE.WebGLRenderer({ antialias: !phone, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, phone ? 1.25 : 1.5));
+  // resolution adapts to keep the frame rate steady: prMax is the sharpest we ever draw, prMin the softest
+  const prMax = () => Math.min(devicePixelRatio || 1, phone ? 1.25 : 1.5);
+  const prMin = () => Math.min(prMax(), phone ? 0.75 : 0.9);
+  let pr = prMax();
+  renderer.setPixelRatio(pr);
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -55,7 +60,8 @@ async function main() {
   scene.add(level.group);
 
   const player = new Player(world, level.anchors.start, -1, () => false, level.inWater,
-    () => [...level.pots.filter((p) => !p.broken).map((p) => p.body), ...level.crates.map((c) => c.body)]);
+    () => pushables);
+  const pushables = [...level.pots.map((p) => p.body), ...level.crates.map((c) => c.body)];
   player.facing = Math.PI;
 
   const design = params.get('spirit');
@@ -68,13 +74,15 @@ async function main() {
   camera.cam.far = 1000; camera.cam.updateProjectionMatrix();
   camera.snap(player.pos, player.facing);
   const particles = new Particles();
-  particles.setScale(innerHeight);
   scene.add(particles.points);
   const flowerSpots = [new THREE.Vector3(-3, 1.6, -8.4), new THREE.Vector3(3.6, 1.6, 6.4), new THREE.Vector3(-5, 0, -11), new THREE.Vector3(2.8, 0, -26),
     new THREE.Vector3(-8, 0.8, -13), new THREE.Vector3(6, 0, -11), new THREE.Vector3(-8.6, 1.6, 6), new THREE.Vector3(15, 0, -9.5)];
   const ambient = new Ambient(new THREE.Vector3(7.4, 6.6, 5.6), flowerSpots, phone, heightAt);
-  ambient.setScale(innerHeight);
   scene.add(ambient.group);
+
+  // point sprites are sized in drawn pixels, so they follow the resolution and stay the same size on screen
+  const pointScale = () => { particles.setScale(innerHeight * pr / 1.5); ambient.setScale(innerHeight * pr / 1.5); };
+  pointScale();
 
   const input = new Input(renderer.domElement);
   if (touch) input.device = 'touch';
@@ -128,12 +136,14 @@ async function main() {
     ? 'Left thumb moves. Jump and Bap on the right. Drag to look.'
     : 'Move WASD · Jump Space · Bap E · Drag to look. Gamepad works too.';
   document.getElementById('touch')!.hidden = !touch;
-  let started = false;
+  let started = false, swallow = false;
   let introT = -1;
   const INTRO = 6.0;
   const begin = () => {
     if (started) return; started = true;
     sound.start(); startEl.classList.add('gone');
+    // the key or button that started the game must not also jump, bap or hurry the intro
+    input.takeJump(); input.takePaw(); swallow = true;
     introT = params.has('nointro') ? INTRO : 0;
     if (introT === 0) setTimeout(() => showBanner('Bring three embers to the sleeping spirit.', 3800), 900);
   };
@@ -141,9 +151,11 @@ async function main() {
   input.onAny = () => { if (started) sound.start(); };
   addEventListener('keydown', (e) => { if (!started && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); begin(); } });
 
+  let bannerFade = 0, bannerHide = 0;
   function showBanner(text: string, ms: number) {
+    clearTimeout(bannerFade); clearTimeout(bannerHide);
     banner.textContent = text; banner.hidden = false; banner.style.opacity = '1';
-    setTimeout(() => { banner.style.opacity = '0'; setTimeout(() => (banner.hidden = true), 1000); }, ms);
+    bannerFade = setTimeout(() => { banner.style.opacity = '0'; bannerHide = setTimeout(() => (banner.hidden = true), 1000); }, ms);
   }
   function updateHud() {
     lampDots.forEach((d, i) => { d.classList.toggle('lit', i < spiritLevel); d.classList.toggle('next', i === spiritLevel && !awake); });
@@ -152,32 +164,47 @@ async function main() {
 
   // first-minute coach: one short line at a time, in the world, next to the thing it is about
   const movedFrom = level.anchors.start.clone();
+  const anchorAt = new THREE.Vector3();
+  const above = (p: THREE.Vector3, h: number) => anchorAt.set(p.x, p.y + h, p.z);
+  // the gate hint comes before "bring it", since the gate stands between the seed and the spirit
   const steps = [
-    { line: 'Follow the path.', key: () => input.glyph('move'), anchor: () => player.pos.clone().add(new THREE.Vector3(0, 1.0, 0)),
+    { line: 'Follow the path.', key: () => input.glyph('move'), anchor: () => above(player.pos, 1.0),
       show: () => introT >= INTRO, done: () => player.pos.distanceTo(movedFrom) > 2.5 },
     { line: 'Jump. Tap again up high.', key: () => input.glyph('jump'), anchor: () => level.anchors.wall,
       show: () => player.pos.distanceTo(level.anchors.wall) < 5, done: () => player.usedDouble || (player.grounded && player.pos.y > 2.3) },
-    { line: 'Bap it.', key: () => input.glyph('paw'), anchor: () => potWithSeed.mesh.position.clone().add(new THREE.Vector3(0, 0.6, 0)),
+    { line: 'Bap it.', key: () => input.glyph('paw'), anchor: () => above(potWithSeed.mesh.position, 0.6),
       show: () => player.pos.distanceTo(potWithSeed.mesh.position) < 2.8, done: () => potWithSeed.broken },
-    { line: 'Bring it to the spirit.', key: () => '', anchor: () => player.pos.clone().add(new THREE.Vector3(0, 1.1, 0)),
-      show: () => carried !== null, done: () => spiritLevel > 0 || level.gate.opening },
     { line: 'Bap the gate open.', key: () => input.glyph('paw'), anchor: () => level.anchors.gate,
       show: () => player.pos.distanceTo(level.gate.centre) < 3.5, done: () => level.gate.opening },
+    { line: 'Bring it to the spirit.', key: () => '', anchor: () => above(player.pos, 1.1),
+      show: () => carried !== null, done: () => spiritLevel > 0 },
   ];
+  // a step, once done, stays done; the line shown is the first open step that applies right now
+  const stepDone = steps.map(() => false);
   let stepIndex = 0;
   let coachShown = false;
+  const proj = new THREE.Vector3();
   function updateCoach() {
-    while (stepIndex < steps.length && steps[stepIndex].done()) stepIndex++;
-    const s = steps[stepIndex];
+    let s: typeof steps[number] | null = null;
+    stepIndex = steps.length;
+    for (let i = 0; i < steps.length; i++) {
+      if (!stepDone[i] && steps[i].done()) stepDone[i] = true;
+      if (stepDone[i]) continue;
+      stepIndex = Math.min(stepIndex, i);
+      if (!s && started && introT >= INTRO && steps[i].show()) s = steps[i];
+    }
     let visible = false;
-    if (s && started && introT >= INTRO && s.show()) {
-      const p = s.anchor().clone().project(camera.cam);
+    if (s) {
+      const p = proj.copy(s.anchor()).project(camera.cam);
       if (p.z < 1 && Math.abs(p.x) < 1.1 && Math.abs(p.y) < 1.1) {
-        const x = THREE.MathUtils.clamp((p.x * 0.5 + 0.5) * innerWidth, 120, innerWidth - 120);
-        const y = THREE.MathUtils.clamp((-p.y * 0.5 + 0.5) * innerHeight, 70, innerHeight - 140);
-        coach.style.left = x + 'px'; coach.style.top = y + 'px';
         if (coachLine.textContent !== s.line) coachLine.textContent = s.line;
         const k = s.key(); if (coachKey.textContent !== k) coachKey.textContent = k;
+        // keep the whole line on screen, and clear of the lamps and the map at the top
+        const half = coach.offsetWidth / 2 + 12;
+        const x = THREE.MathUtils.clamp((p.x * 0.5 + 0.5) * innerWidth, half, Math.max(half, innerWidth - half));
+        const top = Math.min(innerHeight * 0.45, minimap.el.hidden ? 70 : minimap.el.offsetHeight + 60);
+        const y = THREE.MathUtils.clamp((-p.y * 0.5 + 0.5) * innerHeight, top, innerHeight - 140);
+        coach.style.left = x + 'px'; coach.style.top = y + 'px';
         visible = true;
       }
     }
@@ -205,6 +232,7 @@ async function main() {
   function breakPot(p: typeof level.pots[number]) {
     p.broken = true;
     const at = p.mesh.position.clone();
+    pushables.splice(pushables.indexOf(p.body), 1);
     world.removeRigidBody(p.body);
     p.mesh.visible = false;
     for (let i = 0; i < 14; i++) particles.emit(at, new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 3 + 1, (Math.random() - 0.5) * 3), 0.07, 1.2 + Math.random(), shardCol, 0.95, 1, 1.2);
@@ -212,7 +240,11 @@ async function main() {
     sound.breakPot();
     if (p.seed !== null) {
       const s = seeds[p.seed];
-      s.state = 'idle'; s.mesh.visible = true; s.home.copy(at).setY(Math.max(at.y, 0) + 0.35); s.pos.copy(s.home); s.t = 0;
+      // a seed that would land in the river or off the terraces waits where its pot stood instead
+      const lost = level.inWater(at) || at.y < -0.5 || (at.x > 9.3 && at.x < 13.7 && at.y < 0.6);
+      s.state = 'idle'; s.mesh.visible = true;
+      if (lost) s.home.copy(p.spawn).setY(p.spawn.y + 0.25); else s.home.copy(at).setY(Math.max(at.y, 0) + 0.35);
+      s.pos.copy(s.home); s.t = 0;
       potGlow.visible = false;
     }
   }
@@ -249,37 +281,64 @@ async function main() {
   const prevPos = player.pos.clone(), curPos = player.pos.clone();
   const lerpPos = new THREE.Vector3();
   let renderFacing = player.facing;
+  let moveYaw = 0, idleStick = 1;
+  let goalAt: THREE.Vector3 | null = null, mapped = false;
+  const potV = new THREE.Vector3(), tmpV = new THREE.Vector3(), spiritTop = new THREE.Vector3(), ORIGIN = new THREE.Vector3();
+  const introFollow = new THREE.Vector3(), introLook = new THREE.Vector3();
+  const glowCold = new THREE.Color('#5A3E2C'), glowWarm = new THREE.Color('#FFC46B');
+  const blobRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
+  // the sun's own sideways and up directions, for snapping the shadow map
+  const lightX = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), sunDir).normalize();
+  const lightY = new THREE.Vector3().crossVectors(sunDir, lightX).normalize();
+  const minimap = new Minimap();
   let camOverride: { p: THREE.Vector3; t: THREE.Vector3; rel: boolean } | null = null;
   let gatePush = 0;
   let fps = 60;
 
   function frame(now: number) {
+    // ask for the next frame first, so one surprise can never freeze the game
+    requestAnimationFrame(frame);
     const dt = Math.min(0.1, (now - last) / 1000); last = now; time += dt;
     fps = fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
-    input.poll();
+    input.poll(dt);
     const look = input.takeLook();
-    if (!started) { input.takeJump(); input.takePaw(); }
+    if (!started) {
+      // before the start card is gone nothing moves; a gamepad button presses "Wake up"
+      if (input.takePadPress()) begin();
+      input.takeJump(); input.takePaw();
+      input.moveX = input.moveY = 0; input.jumpHeld = input.pawHeld = false; look[0] = look[1] = 0;
+    } else if (swallow) {
+      // ignore the key that started the game until it is let go
+      if (input.jumpHeld || input.pawHeld) { input.takeJump(); input.takePaw(); input.jumpHeld = input.pawHeld = false; } else swallow = false;
+    }
+    adaptResolution(dt);
     // any real input during the intro hurries it along
     if (introT >= 0 && introT < INTRO) {
       introT += dt;
       if ((Math.abs(input.moveX) + Math.abs(input.moveY) > 0.3 || input.jumpHeld || input.pawHeld) && introT < INTRO - 0.9) introT = INTRO - 0.9;
     }
     const inIntro = introT >= 0 && introT < INTRO;
-    if (started && !inIntro && hud.hidden) hud.hidden = false;
+    if (started && !inIntro && hud.hidden) { hud.hidden = false; minimap.el.hidden = false; }
     updateWind(dt);
+
+    // movement is read against the camera angle from when the stick was pushed, so the camera can swing
+    // round behind Moth without bending its path; let go (or drag the view) to pick up the new angle
+    const pushing = Math.abs(input.moveX) + Math.abs(input.moveY) > 0.2;
+    idleStick = pushing ? 0 : idleStick + dt;
+    if (idleStick > 0.12 || look[0] || look[1]) moveYaw = camera.yaw;
 
     acc += dt;
     let n = 0;
     while (acc >= STEP && n < 5) {
       prevPos.copy(curPos);
       if (inIntro && introT < INTRO - 0.9) { input.takeJump(); input.takePaw(); }
-      player.update(STEP, input, camera.yaw);
+      player.update(STEP, input, moveYaw);
       world.step();
       curPos.copy(player.pos);
       for (const e of player.events) handleEvent(e);
       for (const p of level.pots) {
         if (p.broken) continue;
-        const v = p.body.linvel(); const vv = new THREE.Vector3(v.x, v.y, v.z);
+        const v = p.body.linvel(); const vv = potV.set(v.x, v.y, v.z);
         const tr = p.body.translation();
         const moved = Math.hypot(tr.x - p.spawn.x, tr.y - p.spawn.y, tr.z - p.spawn.z);
         if ((vv.distanceTo(p.prevV) > 2.4 && moved > 0.3) || tr.y < -1) breakPot(p);
@@ -311,7 +370,8 @@ async function main() {
     const sp = Math.hypot(player.vel.x, player.vel.z) / T.runSpeed;
     moth.update(dt, sp, player.grounded || player.floating, player.vel);
     {
-      const hit = world.castRay(new RAPIER.Ray({ x: lerpPos.x, y: lerpPos.y + 0.3, z: lerpPos.z }, { x: 0, y: -1, z: 0 }), 6, true, undefined, undefined, player.collider);
+      blobRay.origin.x = lerpPos.x; blobRay.origin.y = lerpPos.y + 0.3; blobRay.origin.z = lerpPos.z;
+      const hit = world.castRay(blobRay, 6, true, undefined, undefined, player.collider);
       const gy = hit ? lerpPos.y + 0.3 - hit.timeOfImpact : lerpPos.y;
       const h = Math.max(0, lerpPos.y - gy);
       moth.blob.position.set(lerpPos.x, gy + 0.015, lerpPos.z);
@@ -324,25 +384,25 @@ async function main() {
     for (const s of seeds) {
       s.t += dt;
       if (s.state === 'idle') {
-        s.pos.copy(s.home).add(new THREE.Vector3(0, Math.sin(s.t * 2) * 0.06, 0));
+        s.pos.copy(s.home); s.pos.y += Math.sin(s.t * 2) * 0.06;
         const isBright = s === bright;
         s.glow.material.opacity = isBright ? 0.95 + Math.sin(s.t * 3) * 0.05 : 0.4;
         s.glow.scale.setScalar(isBright ? 1.2 + Math.sin(s.t * 3) * 0.12 : 0.7);
         if (player.pos.distanceTo(s.pos) < 0.95 && !carried && !player.floating) {
           s.state = 'carried'; carried = s; sound.pickup();
-          particles.burst(s.pos.clone(), 10, 1.0, 0.08, amber, 0.9, 0.6);
+          particles.burst(s.pos, 10, 1.0, 0.08, amber, 0.9, 0.6);
         }
       } else if (s.state === 'carried') {
         s.pos.lerp(moth.carryAnchor.position, Math.min(1, dt * 10));
         // hugged to Moth's belly: small enough to keep the face clear
         s.glow.material.opacity = 0.45; s.glow.scale.setScalar(0.7);
         s.mesh.scale.setScalar(THREE.MathUtils.damp(s.mesh.scale.x, 0.5, 8, dt));
-        if (Math.random() < dt * 4) particles.emit(s.pos.clone(), new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.3, (Math.random() - 0.5) * 0.3), 0.04, 0.9, amber, 0.9, 0.5, 1.5);
+        if (Math.random() < dt * 4) particles.emit(s.pos, tmpV.set((Math.random() - 0.5) * 0.3, 0.3, (Math.random() - 0.5) * 0.3), 0.04, 0.9, amber, 0.9, 0.5, 1.5);
         if (Math.hypot(player.pos.x - level.spirit.x, player.pos.z - level.spirit.z) < 2.5 && player.pos.y < 2.2) { s.state = 'delivering'; s.t = 0; carried = null; }
       } else if (s.state === 'delivering') {
         const k = Math.min(1, s.t / 0.9);
         s.mesh.scale.setScalar(THREE.MathUtils.damp(s.mesh.scale.x, 1, 6, dt));
-        const target = level.spirit.clone().add(new THREE.Vector3(0, 1.4, 0));
+        const target = tmpV.set(level.spirit.x, level.spirit.y + 1.4, level.spirit.z);
         s.pos.lerp(target, Math.min(1, dt * 5)); s.pos.y += Math.sin(k * Math.PI) * dt * 2;
         s.glow.scale.setScalar(0.8 + k * 0.8);
         if (k >= 1) { s.state = 'placed'; s.mesh.visible = false; placeSeed(); }
@@ -350,16 +410,17 @@ async function main() {
       s.mesh.position.copy(s.pos);
     }
     if (potGlow.visible) {
-      potGlow.position.copy(potWithSeed.mesh.position).add(new THREE.Vector3(0, 0.15, 0));
+      potGlow.position.copy(potWithSeed.mesh.position); potGlow.position.y += 0.15;
       potGlow.material.opacity = 0.55 + Math.sin(time * 3) * 0.15;
     }
     // the beacon: over the pot first, then the brightest seed, then the spirit while carrying
     {
       let want: THREE.Vector3 | null = null;
       if (awake) want = null;
-      else if (carried) want = level.spirit.clone().add(new THREE.Vector3(0, 0.6, 0));
+      else if (carried) want = spiritTop.set(level.spirit.x, level.spirit.y + 0.6, level.spirit.z);
       else if (bright) want = bright.pos;
       else if (!potWithSeed.broken) want = potWithSeed.mesh.position;
+      goalAt = want;
       const m = beacon.material as THREE.MeshBasicMaterial;
       if (want) {
         beaconAt.lerp(want, beaconAt.lengthSq() ? Math.min(1, dt * 3) : 1);
@@ -372,15 +433,14 @@ async function main() {
     }
 
     // spirit: warmer with each seed, wakes with the last
-    const glowCol = new THREE.Color('#5A3E2C').lerp(new THREE.Color('#FFC46B'), spiritLevel / 3);
-    (level.spiritGlow.material as THREE.MeshBasicMaterial).color.copy(glowCol);
+    (level.spiritGlow.material as THREE.MeshBasicMaterial).color.lerpColors(glowCold, glowWarm, spiritLevel / 3);
     level.spiritMesh.scale.set(1 + Math.sin(time * 1.2) * 0.012, 1 - Math.sin(time * 1.2) * 0.015 * (awake ? 2 : 1), 1 + Math.sin(time * 1.2) * 0.012);
     if (awake) {
       wakeT += dt;
       level.wheel.rotation.x -= dt * Math.min(1, wakeT * 0.3) * 0.9;
       level.spiritMesh.rotation.z = Math.sin(time * 2) * 0.04;
     } else level.spiritMesh.rotation.z = Math.sin(time * 0.6) * 0.015;
-    level.lanterns.forEach((l, i) => { if (i < spiritLevel) l.halo.material.opacity = 0.75 + Math.sin(time * 2.3 + i) * 0.08; });
+    for (let i = 0; i < spiritLevel && i < level.lanterns.length; i++) level.lanterns[i].halo.material.opacity = 0.75 + Math.sin(time * 2.3 + i) * 0.08;
 
     // sparrows hop away when Moth comes close, and come back later
     for (const s of level.sparrows) {
@@ -395,11 +455,11 @@ async function main() {
     }
 
     // fireflies along the high route to the keepsake
-    fireflies.forEach((f, i) => {
-      const base = level.fireflies[i];
+    for (let i = 0; i < fireflies.length; i++) {
+      const f = fireflies[i], base = level.fireflies[i];
       f.position.set(base.x + Math.sin(time * 0.7 + i) * 0.15, base.y + Math.sin(time * 1.1 + i * 2) * 0.12, base.z + Math.cos(time * 0.6 + i) * 0.15);
       f.material.opacity = (0.35 + 0.3 * Math.sin(time * 2.3 + i * 1.7) ** 2) * (keepsakeFound ? 0.3 : 1);
-    });
+    }
     if (!keepsakeFound) {
       bow.rotation.y += dt * 0.8; bow.position.y = level.keepsake.y + Math.sin(time * 2) * 0.05;
       if (player.pos.distanceTo(level.keepsake) < 0.8) {
@@ -408,35 +468,71 @@ async function main() {
         showBanner('A ribbon for Moth.', 2200);
       }
     }
-    level.sunShafts.forEach((s, i) => {
+    for (let i = 0; i < level.sunShafts.length; i++) {
+      const s = level.sunShafts[i];
       // fade out when the camera walks into a beam, so it never becomes a flat slab across the screen
       const near = THREE.MathUtils.smoothstep(s.position.distanceTo(camera.cam.position), 1.5, 4.5);
       (s.material as THREE.MeshBasicMaterial).opacity = ((i < 5 ? 0.16 : 0.12) + 0.05 * Math.sin(time * 0.8 + i) + SHARED.uGust.value * 0.03) * near;
-    });
+    }
 
     particles.update(dt);
     if (camOverride) {
-      const base = camOverride.rel ? lerpPos : new THREE.Vector3();
-      camera.cam.position.copy(camOverride.p).add(base); camera.cam.lookAt(camOverride.t.clone().add(base));
+      const base = camOverride.rel ? lerpPos : ORIGIN;
+      camera.cam.position.copy(camOverride.p).add(base); camera.cam.lookAt(tmpV.copy(camOverride.t).add(base));
     } else {
       camera.update(dt, lerpPos, player.vel, look);
       if (inIntro) {
-        const fp = camera.cam.position.clone(), fl = lerpPos.clone().add(new THREE.Vector3(0, T.camHeight, 0));
-        introCamera(introT, fp, fl);
+        introFollow.copy(camera.cam.position); introLook.set(lerpPos.x, lerpPos.y + T.camHeight, lerpPos.z);
+        introCamera(introT, introFollow, introLook);
       }
     }
-    // shadows follow Moth in steps so they do not swim
-    const snap = (v: number) => Math.round(v / 2) * 2;
-    sun.target.position.set(snap(lerpPos.x), 0, snap(lerpPos.z - 4));
-    sun.position.copy(sun.target.position).addScaledVector(sunDir, 45);
+    camera.cam.updateMatrixWorld();
+    // the shadow map follows Moth in whole shadow texels, measured across the sun, so shadow edges never crawl
+    {
+      const texel = (sun.shadow.camera.right - sun.shadow.camera.left) / sun.shadow.mapSize.x;
+      tmpV.set(lerpPos.x, 0, lerpPos.z - 4);
+      const a = Math.round(tmpV.dot(lightX) / texel) * texel, b = Math.round(tmpV.dot(lightY) / texel) * texel, c = tmpV.dot(sunDir);
+      sun.target.position.copy(lightX).multiplyScalar(a).addScaledVector(lightY, b).addScaledVector(sunDir, c);
+      sun.position.copy(sun.target.position).addScaledVector(sunDir, 45);
+    }
     sky.update(dt, camera.cam);
     ambient.update(dt, time, camera.cam, sunDir, lerpPos);
     updateCoach();
-    camera.cam.updateMatrixWorld();
     moth.renderSmoke(camera.cam, time);
-    for (const x of lineup) { x.update(dt, 0, true, new THREE.Vector3()); x.renderSmoke(camera.cam, time); }
+    for (const x of lineup) { x.update(dt, 0, true, ORIGIN); x.renderSmoke(camera.cam, time); }
     renderer.render(scene, camera.cam);
-    requestAnimationFrame(frame);
+    // photograph the level for the map once, on the first frame, while the start card is still up
+    if (!mapped) { mapped = true; minimap.capture(renderer, scene, [level.group]); }
+    if (!minimap.el.hidden) minimap.update(dt, lerpPos, renderFacing, camera.yaw, goalAt, level.spirit);
+  }
+
+  // keep the frame rate steady: draw a little softer when frames run long, sharper again when there is room.
+  // If drawing softer does not help, the screen itself is capped (a phone in low power mode runs at 30 Hz):
+  // then go back to sharp and take that rate as the target.
+  let refresh = 0, capped = 0, slowFor = 0, fastFor = 0, settle = 2, probe = 0, fpsAtDrop = 0, noGain = 0;
+  function applySize() {
+    renderer.setPixelRatio(pr);
+    renderer.setSize(innerWidth, innerHeight);
+    camera.cam.aspect = innerWidth / innerHeight; camera.cam.updateProjectionMatrix();
+    pointScale();
+    settle = 1.5;
+  }
+  function adaptResolution(dt: number) {
+    if (params.has('fixedres') || document.hidden || !started) return;
+    if (settle > 0) { settle -= dt; return; }
+    refresh = Math.max(refresh * (1 - dt * 0.02), fps);
+    if (probe > 0 && (probe -= dt) <= 0) {
+      noGain = fps < fpsAtDrop + 2 ? noGain + 1 : 0;
+      if (noGain >= 2) { capped = Math.round(fpsAtDrop); noGain = 0; pr = prMax(); applySize(); return; }
+    }
+    const target = capped || Math.max(refresh, 60);
+    const slow = fps < Math.min(target * 0.85, 52), fast = fps > Math.min(target * 0.95, 58);
+    slowFor = slow ? slowFor + dt : 0;
+    fastFor = fast ? fastFor + dt : 0;
+    if (slowFor > 1.2 && probe <= 0 && pr > prMin() + 0.01) {
+      fpsAtDrop = fps; probe = 2; slowFor = 0;
+      pr = Math.max(prMin(), pr - 0.15); applySize();
+    } else if (fastFor > 8 && pr < prMax() - 0.01) { pr = Math.min(prMax(), pr + 0.1); fastFor = 0; applySize(); }
   }
 
   function openGate() {
@@ -495,10 +591,15 @@ async function main() {
     }
   }
 
-  addEventListener('resize', () => {
-    renderer.setSize(innerWidth, innerHeight);
-    camera.cam.aspect = innerWidth / innerHeight; camera.cam.updateProjectionMatrix();
-    particles.setScale(innerHeight); ambient.setScale(innerHeight);
+  // resize, rotate, browser zoom or a move to another screen: redo the size and the sharpness limits
+  const onResize = () => { pr = THREE.MathUtils.clamp(pr, prMin(), prMax()); applySize(); };
+  addEventListener('resize', onResize);
+  visualViewport?.addEventListener('resize', onResize);
+  // a hidden tab goes quiet and lets go of every key; coming back starts from a clean frame
+  document.addEventListener('visibilitychange', () => {
+    input.clear();
+    if (document.hidden) sound.ctx?.suspend();
+    else { if (started) sound.ctx?.resume(); last = performance.now(); acc = 0; }
   });
 
   // dev: stand other spirit designs next to Moth to compare them
@@ -528,9 +629,11 @@ async function main() {
     },
     state: () => ({ pos: player.pos.toArray().map((v) => +v.toFixed(2)), grounded: player.grounded, floating: player.floating,
       seeds: seeds.map((s) => s.state), spirit: spiritLevel, step: stepIndex, carried: !!carried, gate: level.gate.opening, fps: Math.round(fps),
-      calls: renderer.info.render.calls, tris: renderer.info.render.triangles }),
+      calls: renderer.info.render.calls, tris: renderer.info.render.triangles, intro: +introT.toFixed(2), pr }),
   };
   if (params.has('autostart')) begin();
+  // touch screens on laptops and tablets with a trackpad: show the buttons once a finger is used
+  addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') document.getElementById('touch')!.hidden = false; });
   requestAnimationFrame(frame);
 }
 
