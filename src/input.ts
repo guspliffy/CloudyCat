@@ -18,6 +18,7 @@ export class Input {
   private padA = false;
   private padEdge = false;
   private padB = false;
+  private actions = new Set<'confirm'>();
   private look: [number, number] = [0, 0];
   private dragId: number | null = null;
   private dragX = 0;
@@ -40,6 +41,7 @@ export class Input {
       this.keys.add(e.code);
       if (e.code === 'Space') { this.jumpEdge = true; e.preventDefault(); }
       if (e.code === 'KeyE' || e.code === 'KeyJ' || e.code === 'KeyK') this.pawEdge = true;
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') this.actions.add('confirm');
       this.onAny?.();
     });
     addEventListener('keyup', (e) => { if (e.key === 'Meta') this.keys.clear(); else this.keys.delete(e.code); });
@@ -99,7 +101,7 @@ export class Input {
 
   /** Let go of everything, for example when the tab is hidden. */
   clear() {
-    this.keys.clear(); this.jumpEdge = this.pawEdge = false; this.lookX = this.lookY = 0;
+    this.keys.clear(); this.jumpEdge = this.pawEdge = false; this.lookX = this.lookY = 0; this.actions.clear();
     this.touchJump = this.touchPaw = false;
     if (this.stickId !== null) { this.stickId = null; this.touchX = this.touchY = 0; this.hideStick(); }
     this.dragId = null;
@@ -145,6 +147,8 @@ export class Input {
   }
   takeJump() { const j = this.jumpEdge; this.jumpEdge = false; return j; }
   takePaw() { const p = this.pawEdge; this.pawEdge = false; return p; }
+  /** Confirm was asked for since the last call. */
+  takeAction(a: 'confirm') { const had = this.actions.has(a); this.actions.delete(a); return had; }
   /** A gamepad button went down since the last call (to start the game from the pad). */
   takePadPress() { const p = this.padEdge; this.padEdge = false; return p; }
   /** The look drag since the last call. The returned pair is reused every frame. */

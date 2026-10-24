@@ -37,11 +37,15 @@ export class Player {
   private buffer = 0;
   private pawHeldFor = 0;
   private bapCd = 0;
+  private bapBuffer = 0;
   private stepAcc = 0;
   private lastSafe = new THREE.Vector3();
   private safeTimer = 0;
   private floatFrom = new THREE.Vector3();
   private floatT = 0;
+  private floatTo = new THREE.Vector3();
+  private floatDur = 1;
+  private floatArc = 2.2;
   private airTime = 0;
   private minVy = 0;
 
@@ -118,7 +122,9 @@ export class Player {
     // paw: tap to bap, hold near the sunlit gate to thin
     if (input.pawHeld) this.pawHeldFor += dt; else this.pawHeldFor = 0;
     this.bapCd -= dt;
-    if (pawPressed && this.bapCd <= 0) { this.bapCd = T.bapCooldown; this.bap(); }
+    // a bap pressed a moment too early (still cooling down) is kept and comes out as soon as it can
+    this.bapBuffer = pawPressed ? 0.25 : this.bapBuffer - dt;
+    if (this.bapBuffer > 0 && this.bapCd <= 0) { this.bapBuffer = 0; this.bapCd = T.bapCooldown; this.bap(); }
     const wantThin = this.pawHeldFor > T.thinHoldTime && this.nearGate(this.pos);
     const keepThin = this.thinning && input.pawHeld && this.insideGate();
     const nowThin = wantThin || keepThin;
@@ -200,16 +206,26 @@ export class Player {
 
   startFloat() {
     if (this.floating) return;
+    this.travel(this.lastSafe, T.floatBackTime, 2.2);
+  }
+  /** Puff into smoke and drift through the air to `to` (a chimney's twin), landing there. */
+  warpTo(to: THREE.Vector3, time: number, arc: number) {
+    if (this.floating) return;
+    this.travel(to, time, arc);
+    this.lastSafe.copy(to);
+  }
+  private travel(to: THREE.Vector3, time: number, arc: number) {
     this.floating = true; this.floatT = 0; this.floatFrom.copy(this.pos);
+    this.floatTo.copy(to); this.floatDur = time; this.floatArc = arc;
     this.vel.set(0, 0, 0); this.thinning = false;
     this.events.push({ type: 'float' });
   }
   private updateFloat(dt: number) {
-    this.floatT += dt / T.floatBackTime;
+    this.floatT += dt / this.floatDur;
     const k = Math.min(1, this.floatT);
     const e = k * k * (3 - 2 * k);
-    const p = _float.copy(this.floatFrom).lerp(this.lastSafe, e);
-    p.y += Math.sin(k * Math.PI) * 2.2 + (1 - e) * 0.6;
+    const p = _float.copy(this.floatFrom).lerp(this.floatTo, e);
+    p.y += Math.sin(k * Math.PI) * this.floatArc + (1 - e) * 0.6;
     this.float01 = k < 0.85 ? Math.min(1, k * 5) : Math.max(0, 1 - (k - 0.85) / 0.15);
     this.pos.copy(p);
     this.body.setNextKinematicTranslation({ x: p.x, y: p.y + HALF + RADIUS, z: p.z });

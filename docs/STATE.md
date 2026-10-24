@@ -1,6 +1,6 @@
 # State
 
-Updated 2026-10-24 (map, camera and quality pass after Jonny's third playtest).
+Updated 2026-10-24 (Spark Trail fusion: the spirit garden).
 
 ## Decided
 - Game: **Moth** (repo CloudyCat), calm 3D platform-puzzler, concept in `docs/concept.html`.
@@ -46,6 +46,17 @@ Updated 2026-10-24 (map, camera and quality pass after Jonny's third playtest).
 - Goal: a 6 s intro shot of the sleeping spirit with "Bring three embers to the sleeping spirit.", lantern dots in the corner, a light beam over the next thing to do, the spirit breathes an amber ring toward the next seed.
 - Camera pulls in front of walls and now also in front of tree canopies.
 
+## Spark Trail fused into Moth: the spirit garden (2026-10-24)
+- Jonny asked to combine his game Spark Trail with Moth: Moth's free 3D movement and look plus Spark Trail's tasks, adaptive difficulty and worlds. Plan doc: https://claude.ai/artifact/BJt2VKpJGLeGFscsTyTtBz.
+- Two tries were turned down. A puzzle court where Kettle drifts on a board was "just Sparky in Moth's world". Herding a living spark across a 6x6 yard was too small and still not unique. Jonny wants Spark Trail's idea, not its board: walk onto things, push buttons and boxes that unlock the next step of a riddle, bridges, teleports. He picked **spirit gardens + smoke** (2026-10-24 12:53).
+- Now: through an arch in the court's north hedge lies the spirit garden (`src/garden/`, layout numbers in `layout.ts`), about 19 x 23 m inside tall hedges. Spark Trail's pieces become things Kettle uses directly:
+  - Room 1, the brass-plate court: a plate opens the lattice gate only while something holds it down. The big crate slides one flagstone per push (walk into it, or bap it), so it can hold the plate, and it is also the only step up to the ember on the stone stack. A crate pushed against the outer hedge puffs home after a moment, so it is never lost.
+  - Room 2: hop onto the brick chimney and Kettle puffs into smoke and drifts over the wall into the walled bell yard (Spark Trail's portals). An ember waits there. Bapping the bell raises three stones out of the pond, up to the rock with the third ember, and opens the yard door.
+  - Carry the three embers onto the dais at the north end: they fly into the spirit lantern, it lights, and the spirit in the court wakes with its lanterns, the waterwheel and the mill.
+- The map always marks the next step (the arch from outside, then the plate, the crate, the chimney, and so on); Jonny asked for it 2026-10-24.
+- Help adapts like Spark Trail's bands: per tool (plate, crate, chimney, bell, stones, step), the light beam points at the next step only after a wait in the garden, 12, 25 or 45 s depending on how quickly that tool went last time. Coach lines teach each tool once.
+- Progress saves in localStorage `moth-garden-v1`; `?fresh` resets it.
+
 ## Next
-- Jonny plays this build (map, camera, smoothness).
-- Only Mill Terrace exists. Next levels (Washing Lines first) after he signs off on this one; feel pass and music layer.
+- Jonny plays the spirit garden.
+- Then: more gardens (the Spark Trail tools still unused: breeze streams, lily pads that drift, rising bridges), a garden per world, and layout variants chosen by the adaptive bands.
